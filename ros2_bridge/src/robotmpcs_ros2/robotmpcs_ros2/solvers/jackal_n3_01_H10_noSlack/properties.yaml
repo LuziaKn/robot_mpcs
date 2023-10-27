@@ -1,0 +1,10 @@
+constraints:
+- RadialConstraints
+- SelfCollisionAvoidanceConstraints
+- JointLimitConstraints
+- InputLimitConstraints
+m: 3
+npar: 27
+ns: 0
+nu: 2
+nx: 8

@@ -1,0 +1,5 @@
+mpc_planner_node:
+  ros__parameters:
+    parameter1: 42
+    parameter2: "Hello, ROS 2"
+
