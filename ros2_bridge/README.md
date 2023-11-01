@@ -31,7 +31,7 @@ Generate the solver.
 cd ros_bridge
 source source install/local_setup.bash
 cd robotmpcs_ros/script
-python3 make_solver.py ../config/jackal_mpc_config.yaml
+python3 make_solver.py ../../config/jackal_mpc_config.yaml
 ```
 ```commandline
 sudo apt install ros-galactic-velodyne-description

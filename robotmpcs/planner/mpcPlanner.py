@@ -50,6 +50,7 @@ class MPCPlanner(object):
             + "_H"
             + str(self._config.time_horizon)
         )
+        print(self._solverFile)
         if not self._config.slack:
             self._solverFile += "_noSlack"
         if not os.path.isdir(self._solverFile):
@@ -269,14 +270,13 @@ class MPCPlanner(object):
     def solve(self, ob):
         # print("Observation : " , ob[0:self._nx])
         self._xinit = ob[0 : self._nx]
-        if ob.size > self._nx:
-            self.updateDynamicObstacles(ob[self._nx:])
         action = np.zeros(self._nu)
         problem = {}
         problem["xinit"] = self._xinit
         self.setX0(initialize_type=self._config.initialization, initial_step=self._initial_step)
         problem["x0"] = self._x0.flatten()[:]
         problem["all_parameters"] = self._params
+
         # debug
 
         if self._debug:
@@ -287,9 +287,9 @@ class MPCPlanner(object):
             print(self._config.constraints)
             print("Inequalities: {}".format(ineq))
 
-        self.output, exitflag, info = self._solver.solve(problem)
-        if exitflag < 0:
-            print(exitflag)
+        self.output, self._exitflag, info = self._solver.solve(problem)
+        if self._exitflag < 0:
+            print(self._exitflag)
         if self._config.time_horizon < 10:
             key0 = 'x1'
             key1 = 'x2'

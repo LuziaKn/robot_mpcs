@@ -15,6 +15,7 @@ from rclpy.node import Node
 from tf_transformations import euler_from_quaternion
 
 from robotmpcs.planner.mpcPlanner import MPCPlanner
+from robotmpcs.utils.utils import check_goal_reaching
 from mpscenes.goals.goal_composition import GoalComposition
 from mpscenes.obstacles.sphere_obstacle import SphereObstacle
 
@@ -36,18 +37,15 @@ class MPCPlannerNode(Node):
         self.declare_parameter('mpc.time_step', 0.2)
         self.declare_parameter('mpc.model_name', 'jackal')
         self.declare_parameter('robot.end_link', 'ee_link')
+        self.declare_parameter('package_path', 'default')
 
         robot_type = self.get_parameter('mpc.model_name').get_parameter_value().string_value
+        self._package_path = self.get_parameter('package_path').get_parameter_value().string_value
 
         package_name = 'robotmpcs_ros2'
-        test_setup = get_package_share_directory(package_name) + "/config/" + robot_type + "_mpc_config.yaml"
+        test_setup = self._package_path + "/config/" + robot_type + "_mpc_config.yaml"
         self._config = parse_setup(test_setup)
         self._config = self._config['mpc_planner_node']['ros__parameters']['mpc']
-
-
-
-        # Retrieve the path to the YAML configuration file from the parameter
-
 
 
         self.establish_ros_connections()
@@ -90,7 +88,7 @@ class MPCPlannerNode(Node):
         package_name = 'robotmpcs_ros2'
 
 
-        self._solver_directory = '/home/luzia/code/robot_mpcs/ros2_bridge/src/robotmpcs_ros2/robotmpcs_ros2/solvers/'
+        self._solver_directory = self._package_path + '/robotmpcs_ros2/solvers/'
         print(self._solver_directory)
 
         self._planner = MPCPlanner(
@@ -103,6 +101,8 @@ class MPCPlannerNode(Node):
     def set_mpc_parameter(self):
         constraints = self._config['constraints']
         objectives = self._config['objectives']
+        print(constraints)
+        print(objectives)
 
         for objective in objectives:
             if objective == 'GoalReaching':
@@ -153,12 +153,13 @@ class MPCPlannerNode(Node):
                 print('No function to set the parameters for this constraint type is defined')
 
     def establish_ros_connections(self):
-        self._cmd_pub = self.create_publisher(Twist, "/cmd_vel", 10)
-        self._odom_sub = self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 1)
-        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 1)
+        self._cmd_pub = self.create_publisher(Twist, "/cmd_vel", 1)
+        self._odom_sub = self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 10)
+        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 10)
 
-    def _goal_cb(self, goal_msg: Float64MultiArray):
-
+    def listener_callback(self, msg):
+        self.get_logger().info('I heard: "%s"' % msg)
+    def _goal_cb(self, goal_msg):
         goal_position = goal_msg.data
         # if len(goal_position) != 2:
         #     rospy.logwarn("Goal ignored because of dimension missmatch")
@@ -169,7 +170,7 @@ class MPCPlannerNode(Node):
                 "indices": [0, 1],
                 "parent_link": 'origin',
                 "child_link": self.get_parameter('robot.end_link').get_parameter_value().string_value,
-                "desired_position": [1.0, 1.0],
+                "desired_position": list(goal_position),
                 "epsilon": 0.4,
                 "type": "staticSubGoal"
             }
@@ -193,27 +194,36 @@ class MPCPlannerNode(Node):
 
     def act(self):
         vel_action = self._action * self._dt + self._qudot
+        print("!!!!!!!!!!!!!!" + str(self._q[:2]))
+        if check_goal_reaching(self._q[:2], self._goal):
+            vel_action = [0.0, 0.0]
+            print('GOAL REACHED')
+        elif self._planner._exitflag > 0:
+            print('feasible')
+        else:
+            print("infeasible")
+            vel_action = [0.0, 0.0]
         cmd_msg = Twist()
-        cmd_msg.linear.x = 1.0#vel_action[0]
-        cmd_msg.angular.z = 0.0#vel_action[1]
-        self.get_logger().info(str(vel_action))
+        cmd_msg.linear.x = vel_action[0]
+        cmd_msg.angular.z = vel_action[1]
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
+        self.get_logger().info(str(vel_action))
 
     def run(self):
-        while rclpy.ok():
-            if self._goal:
-                self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
-            self.get_logger().info(str(self._action))
-            self.get_logger().info("action computed")
+        if self._goal:
+            self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
+            self.get_logger().info(str(self._planner._exitflag))
+
             self.act()
+
+
 
 
 
 def main(args=None):
     rclpy.init(args=args)
     mpc_planner_node = MPCPlannerNode()
-    #mpc_planner_node.run()
     rclpy.spin(mpc_planner_node)
     mpc_planner_node.destroy_node()
     rclpy.shutdown()

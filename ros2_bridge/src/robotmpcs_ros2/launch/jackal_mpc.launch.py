@@ -13,6 +13,9 @@ def generate_launch_description():
 
     # Calculate the absolute path to the YAML file
     current_path = os.path.dirname(os.path.abspath(__file__))
+    package_path = os.path.join(
+        current_path,
+        "..")
     config = os.path.join(
         current_path,
         "..",
@@ -25,7 +28,7 @@ def generate_launch_description():
         executable='mpc_planner_node',  # Replace with your node's executable name
         name='mpc_planner_node',
         output='screen',
-        parameters=[config],
+        parameters=[config, {"package_path": package_path}],
     )
 
     ld.add_action(node)

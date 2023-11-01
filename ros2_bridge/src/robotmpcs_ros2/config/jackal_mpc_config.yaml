@@ -10,7 +10,6 @@ mpc_planner_node:
         interval: 1
         initialization: previous_plan
         constraints:
-         - RadialConstraints
          - SelfCollisionAvoidanceConstraints
          - JointLimitConstraints
          - InputLimitConstraints

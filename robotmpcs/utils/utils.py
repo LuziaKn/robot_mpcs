@@ -1,5 +1,6 @@
 import casadi as ca
 import yaml
+import numpy as np
 def diagSX(val, size):
     a = ca.SX(size, size)
     for i in range(size):
@@ -26,3 +27,10 @@ def parse_setup(setup_file: str):
     with open(setup_file, "r") as setup_stream:
         setup = yaml.safe_load(setup_stream)
     return setup
+
+def check_goal_reaching(pos, goal):
+    primary_goal = goal.primary_goal()
+    goal_dist = np.linalg.norm(pos[:2] - primary_goal.position()) # todo remove hard coded dimension, replace it with fk instead
+    if goal_dist <= primary_goal.epsilon():
+        return True
+    return False

@@ -12,7 +12,8 @@ def parse_setup(setup_file: str):
 
 def main(robot_type, setup_file):
     setup = parse_setup(setup_file)
-    setup['robot']['urdf_file'] = os.path.dirname(os.path.abspath(__file__)) + "/../config/assets/"+str(robot_type)+"/" + setup['robot']['urdf_file']
+    setup = setup['mpc_planner_node']['ros__parameters']
+    setup['robot']['urdf_file'] = os.path.dirname(os.path.abspath(__file__)) + "/../../config/assets/"+str(robot_type)+"/" + setup['robot']['urdf_file']
     if setup['robot']['base_type'] == 'holonomic':
         mpc_model = MpcModel(initParamMap=True, **setup)
     elif setup['robot']['base_type'] == 'diffdrive':
@@ -21,6 +22,8 @@ def main(robot_type, setup_file):
     mpc_model.setCodeoptions()
     path_to_solvers = os.path.dirname(os.path.abspath(__file__)) + '/../solvers/'
     mpc_model.generateSolver(location=path_to_solvers)
+    print(setup['mpc']['constraints'])
+    print(setup['mpc']['objectives'])
 
 if __name__ == "__main__":
     #robot_type = re.findall('\/(\S*)M', sys.argv[1])[0]
