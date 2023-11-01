@@ -222,6 +222,8 @@ class MPCPlanner(object):
                 ] = limits_u[1][j]
 
     def setGoalReaching(self, goal):
+        print('############')
+        print(goal.primary_goal().position())
         for i in range(self._config.time_horizon):
             for j in range(self.m()):
                 if j >= len(goal.primary_goal().position()):

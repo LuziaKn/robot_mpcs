@@ -42,27 +42,8 @@ class MPCPlannerNode(Node):
         package_name = 'robotmpcs_ros2'
         test_setup = get_package_share_directory(package_name) + "/config/" + robot_type + "_mpc_config.yaml"
         self._config = parse_setup(test_setup)
+        self._config = self._config['mpc_planner_node']['ros__parameters']['mpc']
 
-
-
-
-
-
-
-
-
-
-
-
-        # Declare class variables
-        self._action = np.ndarray
-        self._q = np.ndarray
-        self._qdot = np.ndarray
-        self._qudot = np.ndarray
-        self._dt = float
-        self._rate = float
-        self._r_body = float
-        self._goal = Union[GoalComposition, None]
 
 
         # Retrieve the path to the YAML configuration file from the parameter
@@ -75,8 +56,9 @@ class MPCPlannerNode(Node):
         self.get_logger().info(f'dt: {self._dt}')
         self.init_scenario()
         self.init_planner()
-        # self.set_mpc_parameter()
-        # self.init_arrays()
+        self.set_mpc_parameter()
+        self.init_arrays()
+        self.create_timer(self._dt, self.run)
 
     def init_scenario(self):
         self._goal = None
@@ -114,25 +96,69 @@ class MPCPlannerNode(Node):
         self._planner = MPCPlanner(
             self._robot_type,
             self._solver_directory,
-            **self._config['mpc_planner_node']['ros__parameters']['mpc'])
+            **self._config)
         self._planner.concretize()
         self._planner.reset()
 
     def set_mpc_parameter(self):
-        self._planner.setObstacles(self._obstacles, self._r_body)
-        if hasattr(self, '_limits'):  # todo also check if they were included in solver
-            self._planner.setJointLimits(np.transpose(self._limits))
-        if hasattr(self, '_limits_vel'):
-            self._planner.setVelLimits(np.transpose(self._limits_vel))
-        if hasattr(self, '_limits_u'):
-            self._planner.setInputLimits(np.transpose(self._limits_u))
+        constraints = self._config['constraints']
+        objectives = self._config['objectives']
+
+        for objective in objectives:
+            if objective == 'GoalReaching':
+                try:
+                    self._planner.setGoalReaching(self._goal)
+                except AttributeError:
+                    print('The required attributes for setting ' + objective + ' are not defined')
+            elif objective == 'ConstraintAvoidance':
+                try:
+                    self._planner.setConstraintAvoidance()
+                except KeyError:
+                    print('The required attributes for setting ' + objective + ' are not defined in the config file')
+            else:
+                print('No function to set the parameters for this objective is defined')
+
+        for constraint in constraints:
+            if constraint == 'JointLimitConstraints':
+                try:
+                    self._planner.setJointLimits(np.transpose(self._limits))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            elif constraint == 'VelLimitConstraints':
+                try:
+                    self._planner.setVelLimits(np.transpose(self._limits_vel))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            elif constraint == 'InputLimitConstraints':
+                try:
+                    self._planner.setInputLimits(np.transpose(self._limits_u))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            elif constraint == 'LinearConstraints':
+                try:
+                    self._planner.setLinearConstraints(self._lin_constr, self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            elif constraint == 'RadialConstraints':
+                try:
+                    self._planner.setRadialConstraints(self._obstacles, self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            elif constraint == 'SelfCollisionAvoidanceConstraints':
+                try:
+                    self._planner.setSelfCollisionAvoidanceConstraints(self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+            else:
+                print('No function to set the parameters for this constraint type is defined')
 
     def establish_ros_connections(self):
-        self._cmd_pub = self.create_publisher(Twist, "/jackal_velocity_controller/cmd_vel", 1)
-        self._odom_sub = self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 10)
-        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 10)
+        self._cmd_pub = self.create_publisher(Twist, "/cmd_vel", 10)
+        self._odom_sub = self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 1)
+        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 1)
 
     def _goal_cb(self, goal_msg: Float64MultiArray):
+
         goal_position = goal_msg.data
         # if len(goal_position) != 2:
         #     rospy.logwarn("Goal ignored because of dimension missmatch")
@@ -143,13 +169,15 @@ class MPCPlannerNode(Node):
                 "indices": [0, 1],
                 "parent_link": 'origin',
                 "child_link": self.get_parameter('robot.end_link').get_parameter_value().string_value,
-                "desired_position": goal_position,
+                "desired_position": [1.0, 1.0],
                 "epsilon": 0.4,
                 "type": "staticSubGoal"
             }
         }
+
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
-        self._planner.setGoal(self._goal)
+        self._planner.setGoalReaching(self._goal)
+        print("GOAL SET")
 
     def _odom_cb(self, odom_msg: Odometry):
         self._q = np.array([
@@ -166,8 +194,9 @@ class MPCPlannerNode(Node):
     def act(self):
         vel_action = self._action * self._dt + self._qudot
         cmd_msg = Twist()
-        cmd_msg.linear.x = vel_action[0]
-        cmd_msg.angular.z = vel_action[1]
+        cmd_msg.linear.x = 1.0#vel_action[0]
+        cmd_msg.angular.z = 0.0#vel_action[1]
+        self.get_logger().info(str(vel_action))
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
 
@@ -176,8 +205,9 @@ class MPCPlannerNode(Node):
             if self._goal:
                 self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
             self.get_logger().info(str(self._action))
+            self.get_logger().info("action computed")
             self.act()
-            self._rate.sleep()
+
 
 
 def main(args=None):
