@@ -12,8 +12,10 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     # Calculate the absolute path to the YAML file
+    current_path = os.path.dirname(os.path.abspath(__file__))
     config = os.path.join(
-        get_package_share_directory('robotmpcs_ros2'),
+        current_path,
+        "..",
         'config',
         'jackal_mpc_config.yaml'
         )
