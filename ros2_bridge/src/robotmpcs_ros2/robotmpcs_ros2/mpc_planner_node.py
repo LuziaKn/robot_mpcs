@@ -19,6 +19,8 @@ from robotmpcs.utils.utils import check_goal_reaching
 from mpscenes.goals.goal_composition import GoalComposition
 from mpscenes.obstacles.sphere_obstacle import SphereObstacle
 
+from forces_pro_server.srv import CallForcesPro
+
 
 def get_rotation(pose: Pose) -> float:
     orientation_q = pose.orientation
@@ -27,11 +29,21 @@ def get_rotation(pose: Pose) -> float:
     return yaw
 
 
+
+
 class MPCPlannerNode(Node):
 
     def __init__(self):
         super().__init__("mpc_planner_node")
         self.get_logger().info('MPC Planner Node is running.')
+    
+        self.cli = self.create_client(CallForcesPro, 'call_forces_pro') # Creates the client in ROS2
+        
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        
+        # Sets up the request
+        self.req = CallForcesPro.Request()
 
         # Load parameters from the 'my_node' namespace
         self.declare_parameter('mpc.time_step', 0.2)
@@ -58,6 +70,24 @@ class MPCPlannerNode(Node):
         self.init_arrays()
         self.create_timer(self._dt, self.run)
 
+
+    def ros_solver_function(self,problem):
+    
+        self.req.x0.data = [0.] * len(list(problem["x0"]))
+        self.req.xinit.data = [0.] * len(list(problem["xinit"]))
+        self.req.params.data = [0.] * len(list(problem["all_parameters"]))
+
+        self.get_logger().info("before spin reached")
+        self.future = self.cli.call_async(self.req)
+        self.get_logger().info(str(self.future.result()))
+        rclpy.spin_until_future_complete(self, self.future)
+        self.get_logger().info(str(self.future.result()))
+        self.get_logger().info("after spin reached")
+  
+        
+
+        return self.future.result()
+    
     def init_scenario(self):
         self._goal = None
         obst1Dict = {
@@ -92,8 +122,11 @@ class MPCPlannerNode(Node):
         print(self._solver_directory)
 
         self._planner = MPCPlanner(
-            self._robot_type,
-            self._solver_directory,
+            robotType = self._robot_type,
+            solversDir = self._solver_directory,
+            solver_function = self.ros_solver_function,
+            client = self.cli,
+            req = self.req,
             **self._config)
         self._planner.concretize()
         self._planner.reset()
@@ -153,8 +186,8 @@ class MPCPlannerNode(Node):
                 print('No function to set the parameters for this constraint type is defined')
 
     def establish_ros_connections(self):
-        self._cmd_pub = self.create_publisher(Twist, "/cmd_vel", 1)
-        self._odom_sub = self.create_subscription(Odometry, "/odometry/filtered", self._odom_cb, 10)
+        self._cmd_pub = self.create_publisher(Twist, "/luzia_Alienware_m15_R4/platform/command_limiter_node/base/cmd_vel_in_navigation", 1)
+        self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 10)
         self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 10)
 
     def listener_callback(self, msg):
@@ -212,7 +245,10 @@ class MPCPlannerNode(Node):
 
     def run(self):
         if self._goal:
-            self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
+            print("@@@@@@@@@@@ goal received")
+            self._action, output = self._planner.computeAction(self._q, self._qdot, self._qudot)
+                # Here we print the result
+
             self.get_logger().info(str(self._planner._exitflag))
 
             self.act()

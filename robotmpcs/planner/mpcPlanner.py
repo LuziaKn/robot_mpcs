@@ -1,7 +1,7 @@
 import numpy as np
 import yaml
 import os
-import forcespro
+#import forcespro
 from robotmpcs.models.mpcBase import MpcConfiguration
 from robotmpcs.planner.sensor_conversion.free_space_decomposition import FreeSpaceDecomposition
 
@@ -29,10 +29,14 @@ class PlannerSettingIncomplete(Exception):
     pass
 
 class MPCPlanner(object):
-    def __init__(self, robotType, solversDir, mpc_model=None, debug=False, **kwargs):
+    def __init__(self, robotType, solversDir, mpc_model=None, debug=False, solver_function=None,client = None, req = None, **kwargs):
         self._config = MpcConfiguration(**kwargs)
         self._robotType = robotType
         self._initial_step = True
+        self._solver_function = solver_function
+        self._client = client
+        self._req = req
+        
 
         """
         self._paramMap, self._npar, self._nx, self._nu, self._ns = getParameterMap(
@@ -69,12 +73,12 @@ class MPCPlanner(object):
         self._nu = self._properties['nu']
         self._ns = self._properties['ns']
         self._npar = self._properties['npar']
-        try:
-            print("Loading solver %s" % self._solverFile)
-            self._solver = forcespro.nlp.Solver.from_directory(self._solverFile)
-        except Exception as e:
-            print("FAILED TO LOAD SOLVER")
-            raise e
+        # try:
+        #     print("Loading solver %s" % self._solverFile)
+        #     self._solver = forcespro.nlp.Solver.from_directory(self._solverFile)
+        # except Exception as e:
+        #     print("FAILED TO LOAD SOLVER")
+        #     raise e
 
         if self._debug:
             self._mpc_model = mpc_model
@@ -276,9 +280,9 @@ class MPCPlanner(object):
         self.setX0(initialize_type=self._config.initialization, initial_step=self._initial_step)
         problem["x0"] = self._x0.flatten()[:]
         problem["all_parameters"] = self._params
+        
 
         # debug
-
         if self._debug:
             print('debugging')
             z = problem["xinit"]
@@ -287,30 +291,45 @@ class MPCPlanner(object):
             print(self._config.constraints)
             print("Inequalities: {}".format(ineq))
 
-        self.output, self._exitflag, info = self._solver.solve(problem)
-        if self._exitflag < 0:
-            print(self._exitflag)
-        if self._config.time_horizon < 10:
-            key0 = 'x1'
-            key1 = 'x2'
-        elif self._config.time_horizon >= 10 and self._config.time_horizon < 100:
-            key0 = 'x01'
-            key1 = 'x02'
-        elif self._config.time_horizon >= 100:
-            key0 = 'x001'
-            key1 = 'x002'
-        # If in velocity mode, the action should be velocities instead of accelerations
-        if self._config.control_mode == "vel":
-            action = self.output[key1][-self._nu-self._nu: -self._nu]
-        elif self._config.control_mode == "acc":
-            action = self.output[key0][-self._nu:]
-        else:
-            print("No valid control mode specified!")
-            action = np.zeros((self._nu))
-        if self._config.slack:
-            self._slack = self.output[key0][self._nx]
-            if self._slack > 1e-3:
-                print("slack : ", self._slack)
+        print("@@@@@@@@@@@@@@@@@")
+        print("solve function reached")
+        self.output = {'x01': [0.0, 0.0], 'x02': [0.0, 0.0], 'x03': [0.0, 0.0], 'x04': [0.0, 0.0], 'x05': [0.0, 0.0], 'x06': [0.0, 0.0],
+                       'x07': [0.0, 0.0], 'x08': [0.0, 0.0], 'x09': [0.0, 0.0], 'x10': [0.0, 0.0]}
+        self._exitflag = -100
+        info = None
+        future = self._solver_function(problem)
+        action = np.zeros((self._nu))
+
+        if future is not None:
+            self.output = future.output.data
+            print(self.output)
+            self._exitflag = future.exit_code.data
+            action = self.output[0][-self._nu-self._nu: -self._nu]
+        # #self.output, self._exitflag, info = self._solver.solve(problem)
+        # if self._exitflag < 0:
+        #     print(self._exitflag)
+        # if self._config.time_horizon < 10:
+        #     key0 = 'x1'
+        #     key1 = 'x2'
+        # elif self._config.time_horizon >= 10 and self._config.time_horizon < 100:
+        #     key0 = 'x01'
+        #     key1 = 'x02'
+        # elif self._config.time_horizon >= 100:
+        #     key0 = 'x001'
+        #     key1 = 'x002'
+        # # If in velocity mode, the action should be velocities instead of accelerations
+        # if self._config.control_mode == "vel":
+        #     action = self.output[key1][-self._nu-self._nu: -self._nu]
+        # elif self._config.control_mode == "acc":
+        #     action = self.output[key0][-self._nu:]
+        # else:
+        #     print("No valid control mode specified!")
+        #     action = np.zeros((self._nu))
+        # if self._config.slack:
+        #     self._slack = self.output[key0][self._nx]
+        #     if self._slack > 1e-3:
+        #         print("slack : ", self._slack)
+        
 
 
         return action, self.output, info
