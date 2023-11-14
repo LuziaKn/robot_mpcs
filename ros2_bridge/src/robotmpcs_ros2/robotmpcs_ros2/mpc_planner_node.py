@@ -38,12 +38,11 @@ class MPCPlannerNode(Node):
         self.get_logger().info('MPC Planner Node is running.')
     
         self.cli = self.create_client(CallForcesPro, 'call_forces_pro') # Creates the client in ROS2
-        
+
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
         
-        # Sets up the request
-        self.req = CallForcesPro.Request()
+
 
         # Load parameters from the 'my_node' namespace
         self.declare_parameter('mpc.time_step', 0.2)
@@ -69,24 +68,48 @@ class MPCPlannerNode(Node):
         self.set_mpc_parameter()
         self.init_arrays()
         self.create_timer(self._dt, self.run)
+        self.present_solver_output = np.zeros((10,self._planner._nx + self._planner._nu))
+        self._exitflag = 1
 
 
     def ros_solver_function(self,problem):
+        
+        # Sets up the request
+        self.req = CallForcesPro.Request()
     
-        self.req.x0.data = [0.] * len(list(problem["x0"]))
-        self.req.xinit.data = [0.] * len(list(problem["xinit"]))
-        self.req.params.data = [0.] * len(list(problem["all_parameters"]))
+        self.req.x0.data = list(problem["x0"])
+        self.req.xinit.data = list(problem["xinit"])
+        self.req.params.data = list(problem["all_parameters"])
+        self.get_logger().info(str(self.req.params.data))
+
 
         self.get_logger().info("before spin reached")
         self.future = self.cli.call_async(self.req)
-        self.get_logger().info(str(self.future.result()))
-        rclpy.spin_until_future_complete(self, self.future)
-        self.get_logger().info(str(self.future.result()))
+        self.future.add_done_callback(self._get_solver_output_callback)
+        #rclpy.spin_until_future_complete(self, self.future, timeout_sec = None)
         self.get_logger().info("after spin reached")
-  
+        return self.present_solver_output, self._exitflag
+    
+    
+    def _get_solver_output_callback(self, future) -> np.ndarray:
+        """
+        Callback when the request for the solver output was completed.
+        Saves present solver output class attributes and publishes the solver outputs.
+        """
+        resp = future.result()
         
 
-        return self.future.result()
+        if resp is None:
+            self.get_logger().error(
+                "failed")
+            return self.present_solver_output
+
+
+        self.present_solver_output =  np.array(resp.output.data, dtype = np.float64)
+        self._exitflag = resp.exit_code
+        
+        return self.present_solver_output, self._exitflag
+
     
     def init_scenario(self):
         self._goal = None
@@ -125,8 +148,7 @@ class MPCPlannerNode(Node):
             robotType = self._robot_type,
             solversDir = self._solver_directory,
             solver_function = self.ros_solver_function,
-            client = self.cli,
-            req = self.req,
+            ros_flag= True,
             **self._config)
         self._planner.concretize()
         self._planner.reset()
@@ -187,11 +209,12 @@ class MPCPlannerNode(Node):
 
     def establish_ros_connections(self):
         self._cmd_pub = self.create_publisher(Twist, "/luzia_Alienware_m15_R4/platform/command_limiter_node/base/cmd_vel_in_navigation", 1)
-        self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 10)
-        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 10)
+        self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 1)
+        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 1)
 
     def listener_callback(self, msg):
         self.get_logger().info('I heard: "%s"' % msg)
+        
     def _goal_cb(self, goal_msg):
         goal_position = goal_msg.data
         # if len(goal_position) != 2:
@@ -211,7 +234,7 @@ class MPCPlannerNode(Node):
 
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
         self._planner.setGoalReaching(self._goal)
-        print("GOAL SET")
+        self.get_logger().info("goal set to: " + str(goal_position))
 
     def _odom_cb(self, odom_msg: Odometry):
         self._q = np.array([
@@ -224,10 +247,12 @@ class MPCPlannerNode(Node):
             odom_msg.twist.twist.linear.y,
             odom_msg.twist.twist.angular.z,
         ])
+        self.get_logger().info("state set to: " + str(self._q))
 
     def act(self):
-        vel_action = self._action * self._dt + self._qudot
-        print("!!!!!!!!!!!!!!" + str(self._q[:2]))
+        if self._config['control_mode'] == 'acc':
+            vel_action = self._action * self._dt + self._qudot
+            vel_action = [0.0, 0.0]
         if check_goal_reaching(self._q[:2], self._goal):
             vel_action = [0.0, 0.0]
             print('GOAL REACHED')
@@ -241,20 +266,20 @@ class MPCPlannerNode(Node):
         cmd_msg.angular.z = vel_action[1]
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
-        self.get_logger().info(str(vel_action))
+
 
     def run(self):
         if self._goal:
-            print("@@@@@@@@@@@ goal received")
-            self._action, output = self._planner.computeAction(self._q, self._qdot, self._qudot)
+            self.get_logger().info("run function reached")
+            self._action, output, exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
                 # Here we print the result
 
-            self.get_logger().info(str(self._planner._exitflag))
+            self.get_logger().info(str(self._action))
+          
+            self.get_logger().info("exitflag " + str(exitflag))
+
 
             self.act()
-
-
-
 
 
 def main(args=None):

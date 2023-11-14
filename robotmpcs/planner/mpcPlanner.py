@@ -25,17 +25,30 @@ class EmptyObstacle():
     def dim(self):
         return 3
 
+def output2array(output):
+    i = 0
+    N = len(output)
+    dec = int(N//10+1)
+    output_array = np.zeros((N,len(output["x{:0{}d}".format(1, dec)])))
+    for key in output.keys():
+        output_array[i,:] = output[key]
+        i +=1
+
+
+
+    return output_array
+
 class PlannerSettingIncomplete(Exception):
     pass
 
 class MPCPlanner(object):
-    def __init__(self, robotType, solversDir, mpc_model=None, debug=False, solver_function=None,client = None, req = None, **kwargs):
+    def __init__(self, robotType, solversDir, mpc_model=None, debug=False, solver_function=None, ros_flag=False, **kwargs):
         self._config = MpcConfiguration(**kwargs)
         self._robotType = robotType
         self._initial_step = True
         self._solver_function = solver_function
-        self._client = client
-        self._req = req
+        self._ros = ros_flag
+
         
 
         """
@@ -73,12 +86,14 @@ class MPCPlanner(object):
         self._nu = self._properties['nu']
         self._ns = self._properties['ns']
         self._npar = self._properties['npar']
-        # try:
-        #     print("Loading solver %s" % self._solverFile)
-        #     self._solver = forcespro.nlp.Solver.from_directory(self._solverFile)
-        # except Exception as e:
-        #     print("FAILED TO LOAD SOLVER")
-        #     raise e
+        if not self._ros:
+            import forcespro
+            try:
+                 print("Loading solver %s" % self._solverFile)
+                 self._solver = forcespro.nlp.Solver.from_directory(self._solverFile)
+            except Exception as e:
+                 print("FAILED TO LOAD SOLVER")
+                 raise e
 
         if self._debug:
             self._mpc_model = mpc_model
@@ -247,17 +262,11 @@ class MPCPlanner(object):
         pass
 
     def shiftHorizon(self, output):
-        for key in output.keys():
-            if self._config.time_horizon < 10:
-                stage = int(key[-1:])
-            elif self._config.time_horizon >= 10 and self._config.time_horizon < 100:
-                stage = int(key[-2:])
-            elif self._config.time_horizon >= 100:
-                stage = int(key[-3:])
-            if stage == 1:
+        for i in range(len(output)):
+            if i == 0:
                 continue
-            self._x0[stage - 2, 0 : len(output[key])] = output[key]
-            self._x0[-1:, 0 : len(output[key])] = output[key]
+            self._x0[i - 1, 0 : len(output[i,:])] = output[i,:]
+        self._x0[-1:, 0 : len(output[i,:])] = output[i,:]
 
     def setX0(self, initialize_type="current_state", initial_step= True):
         if initialize_type == "current_state" or initialize_type == "previous_plan" and initial_step:
@@ -295,17 +304,25 @@ class MPCPlanner(object):
         print("solve function reached")
         self.output = {'x01': [0.0, 0.0], 'x02': [0.0, 0.0], 'x03': [0.0, 0.0], 'x04': [0.0, 0.0], 'x05': [0.0, 0.0], 'x06': [0.0, 0.0],
                        'x07': [0.0, 0.0], 'x08': [0.0, 0.0], 'x09': [0.0, 0.0], 'x10': [0.0, 0.0]}
-        self._exitflag = -100
+        self._exitflag = -99
         info = None
-        future = self._solver_function(problem)
-        action = np.zeros((self._nu))
+        if self._ros == True:
+            self.output, self._exitflag = self._solver_function(problem)
+            self.output = self.output.reshape((self._config.time_horizon,self._nx + self._nu))
+    
+        else:
+            self.output, self._exitflag, info = self._solver.solve(problem)
+            self.output = output2array(self.output)
+        
 
-        if future is not None:
-            self.output = future.output.data
-            print(self.output)
-            self._exitflag = future.exit_code.data
-            action = self.output[0][-self._nu-self._nu: -self._nu]
-        # #self.output, self._exitflag, info = self._solver.solve(problem)
+        # If in velocity mode, the action should be velocities instead of accelerations
+        if self._config.control_mode == "vel":
+             action = self.output[1,-self._nu-self._nu: -self._nu]
+        elif self._config.control_mode == "acc":
+            action = self.output[0,-self._nu:]
+        else: sys.exit('Select a valid control mode')
+
+        # #
         # if self._exitflag < 0:
         #     print(self._exitflag)
         # if self._config.time_horizon < 10:
@@ -345,5 +362,5 @@ class MPCPlanner(object):
             self._actionCounter = 1
         else:
             self._actionCounter += 1
-        return self._action, output
+        return self._action, output, self._exitflag
 

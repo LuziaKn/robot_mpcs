@@ -8,14 +8,13 @@ mpc_planner_node:
         time_step: 0.1
         slack: False
         interval: 1
-        initialization: previous_plan
+        initialization: current_state
         constraints:
          - SelfCollisionAvoidanceConstraints
          - JointLimitConstraints
          - InputLimitConstraints
         objectives:
          - 'GoalReaching'
-         - 'ConstraintAvoidance'
         weights:
          w: 1.0
          wvel: [0.0, 0.0, 0.0, 1.0, 0.01]
@@ -35,3 +34,4 @@ mpc_planner_node:
         base_type: diffdrive
       example:
         debug: False
+        floating: True

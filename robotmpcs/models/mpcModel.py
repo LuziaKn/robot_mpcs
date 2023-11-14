@@ -117,16 +117,21 @@ class MpcModel(MpcBase):
         self._codeoptions.nlp.integrator.type = "ERK2"
         self._codeoptions.nlp.integrator.Ts = self._dt
         self._codeoptions.nlp.integrator.nodes = 5
-        if self._config.debug:
+        if self._example_config.debug:
             self._codeoptions.printlevel = 2
             self._codeoptions.optlevel = 0
         else:
             self._codeoptions.printlevel = 0
             self._codeoptions.optlevel = 3
 
+        print(self._example_config.floating)
+        if self._example_config.floating:
+            self._codeoptions.embedded_timing = 1
+            self._codeoptions.license.use_floating_license = 1
+
     def generateSolver(self, location="./"):
         _ = self._model.generate_solver(self._codeoptions)
-        if self._debug:
+        if self._example_config.debug:
             location += 'debug/'
         with open(self._solverName + '/paramMap.yaml', 'w') as outfile:
             yaml.dump(self._paramMap, outfile, default_flow_style=False)
