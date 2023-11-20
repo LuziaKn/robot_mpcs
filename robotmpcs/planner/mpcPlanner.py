@@ -1,6 +1,7 @@
 import numpy as np
 import yaml
 import os
+import sys
 #import forcespro
 from robotmpcs.models.mpcBase import MpcConfiguration
 from robotmpcs.planner.sensor_conversion.free_space_decomposition import FreeSpaceDecomposition
@@ -300,11 +301,7 @@ class MPCPlanner(object):
             print(self._config.constraints)
             print("Inequalities: {}".format(ineq))
 
-        print("@@@@@@@@@@@@@@@@@")
-        print("solve function reached")
-        self.output = {'x01': [0.0, 0.0], 'x02': [0.0, 0.0], 'x03': [0.0, 0.0], 'x04': [0.0, 0.0], 'x05': [0.0, 0.0], 'x06': [0.0, 0.0],
-                       'x07': [0.0, 0.0], 'x08': [0.0, 0.0], 'x09': [0.0, 0.0], 'x10': [0.0, 0.0]}
-        self._exitflag = -99
+
         info = None
         if self._ros == True:
             self.output, self._exitflag = self._solver_function(problem)

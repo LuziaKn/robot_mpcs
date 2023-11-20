@@ -14,6 +14,7 @@ class GoalMpcObjective(MpcBase):
         self._npar = npar
 
         self.addEntry2ParamMap("wu", self._nu)
+        print('wu added')
         self.addEntry2ParamMap("wvel", self._nx-self._n)
         self.addEntry2ParamMap("w", self._m)
         if self._config.slack:

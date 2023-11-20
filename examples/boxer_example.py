@@ -59,6 +59,11 @@ class BoxerMpcExample(MpcExample):
                 [-10, 10],
         ])
 
+        self._limits_vel = np.array([
+                [-1.5, 1.5],
+                [-5, 5],
+        ])
+
         self._lin_constr = [np.array([1, 0, 0, -1.5])]
         current_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,13 +99,14 @@ class BoxerMpcExample(MpcExample):
             vel = np.array((ob['robot_0']['joint_state']['forward_velocity'], qdot[2]), dtype=float)
             lidar_obs = ob['robot_0']['LidarSensor'].reshape((number_lidar_rays, 2))
 
-
-            fsd, height = self._planner.updateLinearConstraints(lidar_obs, q, self._r_body, number_lidar_rays)
-            visualize_constraints(fsd, height)
-            action,output = self._planner.computeAction(q, qdot, vel, lidar_obs)
+            if 'LinearConstraints' in self._config['mpc']['constraints']:
+                fsd, height = self._planner.updateLinearConstraints(lidar_obs, q, self._r_body, number_lidar_rays)
+                visualize_constraints(fsd, height)
+            action,output, exitflag = self._planner.computeAction(q, qdot, vel, lidar_obs)
+            print(exitflag)
             plan = []
-            for key in output:
-                plan.append(np.concatenate([output[key][:2],np.zeros(1)]))
+            for i in range(len(output)):
+                plan.append(np.concatenate([output[i,:2],np.zeros(1)]))
             ob, *_ = self._env.step(action)
             if self.check_goal_reaching(ob):
                 print("goal reached")

@@ -6,14 +6,14 @@ mpc:
   time_step: 0.1
   slack: False
   interval: 1
-  initialization: "previous_plan"
-  constraints: [ 'LinearConstraints',
-                 'SelfCollisionAvoidanceConstraints',
-                 'JointLimitConstraints',
-                 'InputLimitConstraints' ]
+  initialization: "current_state"
+  constraints:
+    - SelfCollisionAvoidanceConstraints
+    - JointLimitConstraints
+    - InputLimitConstraints
+    - VelLimitConstraints
   objectives:
     - 'GoalReaching'
-    - 'ConstraintAvoidance'
   weights:
     w: 1.0
     wvel: [0.0, 0.0, 0.0, 1, 0.01]

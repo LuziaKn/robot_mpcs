@@ -5,6 +5,10 @@ from forwardkinematics.fksCommon.fk import ForwardKinematics
 from forwardkinematics.urdfFks.generic_urdf_fk import GenericURDFFk
 
 @dataclass
+class ExampleConfiguration:
+    debug: bool = False
+    floating: bool = False
+@dataclass
 class MpcConfiguration:
     time_horizon: int
     time_step: float
@@ -19,7 +23,7 @@ class MpcConfiguration:
     n: int
     control_mode: str
     name: str = 'mpc'
-    debug: bool = False
+
 
 @dataclass
 class RobotConfiguration:
@@ -38,7 +42,7 @@ class MpcBase(object):
 
     def __init__(self, **kwargs):
         self._config = MpcConfiguration(**kwargs['mpc'])
-        self._debug = kwargs['example']['debug']
+        self._example_config = ExampleConfiguration(**kwargs['example'])
         self._robot_config = RobotConfiguration(**kwargs['robot'])
         with open(self._robot_config.urdf_file, 'r') as f:
             urdf = f.read()

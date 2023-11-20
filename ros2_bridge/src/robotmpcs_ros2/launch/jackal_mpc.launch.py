@@ -18,7 +18,6 @@ def generate_launch_description():
         "..")
     config = os.path.join(
         current_path,
-        "..",
         'config',
         'jackal_mpc_config.yaml'
         )
@@ -30,7 +29,12 @@ def generate_launch_description():
         output='screen',
         parameters=[config, {"package_path": package_path}],
     )
-
     ld.add_action(node)
+    
+    node = Node(package='rviz2',
+             executable='rviz2',
+             arguments=['-d', os.path.join(package_path, 'rviz', 'jackal_experiment.rviz')])
+    ld.add_action(node)
+    
     return ld
 

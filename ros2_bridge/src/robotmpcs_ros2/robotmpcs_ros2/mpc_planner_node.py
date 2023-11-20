@@ -5,7 +5,7 @@ from robotmpcs.utils.utils import parse_setup
 
 import os
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import Pose, Twist
+from geometry_msgs.msg import Pose, Twist, Point
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64MultiArray
 
@@ -19,6 +19,8 @@ from robotmpcs.utils.utils import check_goal_reaching
 from mpscenes.goals.goal_composition import GoalComposition
 from mpscenes.obstacles.sphere_obstacle import SphereObstacle
 
+from ros2_bridge.src.ros_tools.ros_tools.ros_visuals_py import ROSMarkerPublisher
+
 from forces_pro_server.srv import CallForcesPro
 
 
@@ -29,13 +31,12 @@ def get_rotation(pose: Pose) -> float:
     return yaw
 
 
-
-
 class MPCPlannerNode(Node):
 
     def __init__(self):
         super().__init__("mpc_planner_node")
         self.get_logger().info('MPC Planner Node is running.')
+        
     
         self.cli = self.create_client(CallForcesPro, 'call_forces_pro') # Creates the client in ROS2
 
@@ -43,9 +44,8 @@ class MPCPlannerNode(Node):
             self.get_logger().info('service not available, waiting again...')
         
 
-
         # Load parameters from the 'my_node' namespace
-        self.declare_parameter('mpc.time_step', 0.2)
+        self.declare_parameter('mpc.time_step', 0.05)
         self.declare_parameter('mpc.model_name', 'jackal')
         self.declare_parameter('robot.end_link', 'ee_link')
         self.declare_parameter('package_path', 'default')
@@ -58,7 +58,6 @@ class MPCPlannerNode(Node):
         self._config = parse_setup(test_setup)
         self._config = self._config['mpc_planner_node']['ros__parameters']['mpc']
 
-
         self.establish_ros_connections()
         self._dt = self.get_parameter('mpc.time_step').get_parameter_value().double_value
         self._rate = self.create_rate(1 / self._dt)
@@ -67,6 +66,7 @@ class MPCPlannerNode(Node):
         self.init_planner()
         self.set_mpc_parameter()
         self.init_arrays()
+        self.init_visuals()
         self.create_timer(self._dt, self.run)
         self.present_solver_output = np.zeros((10,self._planner._nx + self._planner._nu))
         self._exitflag = 1
@@ -77,10 +77,13 @@ class MPCPlannerNode(Node):
         # Sets up the request
         self.req = CallForcesPro.Request()
     
-        self.req.x0.data = list(problem["x0"])
-        self.req.xinit.data = list(problem["xinit"])
-        self.req.params.data = list(problem["all_parameters"])
-        self.get_logger().info(str(self.req.params.data))
+        self.req.x0.data =  [x for x in problem["x0"]]  
+        self.req.xinit.data =  [x for x in problem["xinit"]]   
+        self.req.params.data = [x for x in problem["all_parameters"]]  
+        #self.get_logger().info("x0: " + str(self.req.x0.data))
+        #self.get_logger().info("xinit: " + str(self.req.xinit.data))
+        #self.get_logger().info("params: " + str(self.req.params.data))
+        
 
 
         self.get_logger().info("before spin reached")
@@ -97,12 +100,11 @@ class MPCPlannerNode(Node):
         Saves present solver output class attributes and publishes the solver outputs.
         """
         resp = future.result()
-        
 
         if resp is None:
             self.get_logger().error(
                 "failed")
-            return self.present_solver_output
+            return self.present_solver_output, self._exitflag
 
 
         self.present_solver_output =  np.array(resp.output.data, dtype = np.float64)
@@ -121,14 +123,28 @@ class MPCPlannerNode(Node):
         self._obstacles = [sphereObst1]
         self._r_body = 0.6
         self._limits = np.array([
-            [-10, 10],
-            [-10, 10],
+            [-50, 50],
+            [-50, 50],
             [-10, 10],
         ])
         self._limits_u = np.array([
-            [-10, 10],
-            [-10, 10],
+            [-1, 1],
+            [-1, 1],
         ])
+        
+        self._limits_vel = np.array([
+            [-0.8, 0.8],
+            [-2, 2],
+        ])
+    
+    def init_visuals(self):
+        self._frame_id = "luzia_Alienware_m15_R4_odom"
+        self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 5)
+        
+        self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
+        self._visuals_goal.set_color(4, 1.0)
+        self._visuals_goal.set_scale(0.5, 0.5, 0.01)
+        self._visuals_goal.add_marker(Point(x=10.0, y=0.0, z=2.0))
 
     def init_arrays(self):
         self._action = np.zeros(2)
@@ -141,7 +157,7 @@ class MPCPlannerNode(Node):
         package_name = 'robotmpcs_ros2'
 
 
-        self._solver_directory = self._package_path + '/robotmpcs_ros2/solvers/'
+        self._solver_directory = self._package_path + '/solvers/'
         print(self._solver_directory)
 
         self._planner = MPCPlanner(
@@ -234,7 +250,7 @@ class MPCPlannerNode(Node):
 
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
         self._planner.setGoalReaching(self._goal)
-        self.get_logger().info("goal set to: " + str(goal_position))
+        #self.get_logger().info("goal set to: " + str(goal_position))
 
     def _odom_cb(self, odom_msg: Odometry):
         self._q = np.array([
@@ -247,19 +263,23 @@ class MPCPlannerNode(Node):
             odom_msg.twist.twist.linear.y,
             odom_msg.twist.twist.angular.z,
         ])
-        self.get_logger().info("state set to: " + str(self._q))
+        #self.get_logger().info("state set to: " + str(self._q))
 
     def act(self):
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
-            vel_action = [0.0, 0.0]
+            # limit to account for model errors
+            vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
+            vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
         if check_goal_reaching(self._q[:2], self._goal):
             vel_action = [0.0, 0.0]
             print('GOAL REACHED')
-        elif self._planner._exitflag > 0:
-            print('feasible')
+        elif self._exitflag > 0:
+            self.get_logger().info("feasible")
+        elif self._exitflag == 0:
+            self.get_logger().info("max num iterations reached")
         else:
-            print("infeasible")
+            self.get_logger().info("infeasible")
             vel_action = [0.0, 0.0]
         cmd_msg = Twist()
         cmd_msg.linear.x = vel_action[0]
@@ -267,17 +287,26 @@ class MPCPlannerNode(Node):
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
 
+    def visualize(self):
+        
+        if self._goal is not None:
+            goal_position = Point(x=self._goal.primary_goal().position()[0], y=self._goal.primary_goal().position()[1], z=0.01)
+            self._visuals_goal.add_marker(goal_position)
+
+        self.marker_publisher.publish()
+
 
     def run(self):
         if self._goal:
-            self.get_logger().info("run function reached")
-            self._action, output, exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
+            #self.get_logger().info("run function reached")
+            self._action, output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
                 # Here we print the result
 
-            self.get_logger().info(str(self._action))
-          
-            self.get_logger().info("exitflag " + str(exitflag))
+            #self.get_logger().info("action " + str(self._action))
+            #self.get_logger().info("output" + str(output))
+            self.get_logger().info("exitflag " + str(self._exitflag))
 
+            self.visualize()
 
             self.act()
 
@@ -286,6 +315,7 @@ def main(args=None):
     rclpy.init(args=args)
     mpc_planner_node = MPCPlannerNode()
     rclpy.spin(mpc_planner_node)
+    mpc_planner_node.marker_publisher.destroy_node()
     mpc_planner_node.destroy_node()
     rclpy.shutdown()
 
