@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 from typing import Union
 import numpy as np
+import time
 from robotmpcs.utils.utils import parse_setup
 
 import os
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import Pose, Twist, Point
+from geometry_msgs.msg import Pose, Twist, Point, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64MultiArray
+from nav2_msgs.action import NavigateToPose
 
 from tf2_ros import TransformBroadcaster
 import rclpy
 from rclpy.node import Node
+from rclpy.action import ActionServer
 from tf_transformations import euler_from_quaternion
 
 from robotmpcs.planner.mpcPlanner import MPCPlanner
@@ -39,6 +42,7 @@ class MPCPlannerNode(Node):
         
     
         self.cli = self.create_client(CallForcesPro, 'call_forces_pro') # Creates the client in ROS2
+        
 
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
@@ -70,6 +74,7 @@ class MPCPlannerNode(Node):
         self.create_timer(self._dt, self.run)
         self.present_solver_output = np.zeros((10,self._planner._nx + self._planner._nu))
         self._exitflag = 1
+        self.output = np.zeros((self._planner._time_horizon,  self._planner._nx + self._planner._nu))
 
 
     def ros_solver_function(self,problem):
@@ -138,13 +143,20 @@ class MPCPlannerNode(Node):
         ])
     
     def init_visuals(self):
-        self._frame_id = "luzia_Alienware_m15_R4_odom"
-        self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 5)
+        self._frame_id = "map"
+        self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 15)
         
         self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
         self._visuals_goal.set_color(4, 1.0)
         self._visuals_goal.set_scale(0.5, 0.5, 0.01)
         self._visuals_goal.add_marker(Point(x=10.0, y=0.0, z=2.0))
+        
+        self._visuals_plan_circle = self.marker_publisher.get_circle(self._frame_id)
+        self._visuals_plan_circle.set_color(7, 0.5)
+        self._visuals_plan_circle.set_scale(0.5, 0.5, 0.01)
+        self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
+        
+
 
     def init_arrays(self):
         self._action = np.zeros(2)
@@ -224,8 +236,16 @@ class MPCPlannerNode(Node):
                 print('No function to set the parameters for this constraint type is defined')
 
     def establish_ros_connections(self):
+        
+        self._action_server = ActionServer(
+            self,
+            NavigateToPose,
+            'mpc/goal_pose',
+            self._goal_cb)
+                
         self._cmd_pub = self.create_publisher(Twist, "/luzia_Alienware_m15_R4/platform/command_limiter_node/base/cmd_vel_in_navigation", 1)
-        self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 1)
+        #self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 1)
+        self._nmcl_sub = self.create_subscription(PoseWithCovarianceStamped, "/NMCLPose", self._nmcl_cb, 1)
         self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 1)
 
     def listener_callback(self, msg):
@@ -264,13 +284,24 @@ class MPCPlannerNode(Node):
             odom_msg.twist.twist.angular.z,
         ])
         #self.get_logger().info("state set to: " + str(self._q))
+        
+    def _nmcl_cb(self, msg: PoseWithCovarianceStamped):
+        self._q = np.array([
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y,
+            get_rotation(msg.pose.pose),
+        ])
+
 
     def act(self):
+        #self.get_logger().info(self._config['control_mode'])
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
             # limit to account for model errors
             vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
             vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
+        elif self._config['control_mode'] == 'vel':
+            vel_action = self._action
         if check_goal_reaching(self._q[:2], self._goal):
             vel_action = [0.0, 0.0]
             print('GOAL REACHED')
@@ -278,6 +309,7 @@ class MPCPlannerNode(Node):
             self.get_logger().info("feasible")
         elif self._exitflag == 0:
             self.get_logger().info("max num iterations reached")
+            vel_action = [0.0, 0.0]
         else:
             self.get_logger().info("infeasible")
             vel_action = [0.0, 0.0]
@@ -292,6 +324,11 @@ class MPCPlannerNode(Node):
         if self._goal is not None:
             goal_position = Point(x=self._goal.primary_goal().position()[0], y=self._goal.primary_goal().position()[1], z=0.01)
             self._visuals_goal.add_marker(goal_position)
+            
+            for state in self._output:
+                position = Point(x=state[0], y=state[1], z=0.01)
+                self._visuals_plan_circle.add_marker(position)
+                
 
         self.marker_publisher.publish()
 
@@ -299,15 +336,25 @@ class MPCPlannerNode(Node):
     def run(self):
         if self._goal:
             #self.get_logger().info("run function reached")
-            self._action, output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
+            start_time = time.time()
+            
+            self._qdot = np.array([
+            self.output[0,3],
+            self.output[0,4],
+            self.output[0,5]])
+
+            self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
+            end_time = time.time()
+            run_time = end_time - start_time
+
                 # Here we print the result
 
             #self.get_logger().info("action " + str(self._action))
             #self.get_logger().info("output" + str(output))
             self.get_logger().info("exitflag " + str(self._exitflag))
+            self.get_logger().info("run time " + str(run_time))
 
             self.visualize()
-
             self.act()
 
 
