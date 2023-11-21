@@ -4,6 +4,6 @@
 [submodule "ros_bridge/src/boxer_simulator"]
 	path = ros_bridge/src/boxer_simulator
 	url = git@github.com:boxer-cpr/boxer_simulator.git
-[submodule "forces_pro_server"]
-	path = forces_pro_server
+[submodule "ros2_bridge/src/forces_pro_server"]
+	path = ros2_bridge/src/forces_pro_server
 	url = git@github.com:oscardegroot/forces_pro_server.git
