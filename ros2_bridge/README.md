@@ -16,6 +16,8 @@ git submodule update --init --recursive
 git submodule update --recursive --remote
 ```
 
+To run the forces_pro_server, adapt the service node to find your solver. Change (ctrl+h) my_solver to <your_solver> in include/solver_service_node.h, src/solver_service_node.cpp, CMakelists.txt
+
 Install `robot_mpcs` globally (or in the virtual environment if you use ros inside one).
 ```bash
 pip install -e . agents
@@ -24,24 +26,27 @@ pip install -e . agents
 Build workspace
 ```bash
 cd ros2_bridge
-colcon build
+./build.sh
 ```
 
-Generate the solver.
+Generate the solver. This automatically saves the solver in the forces_pro_server folder. In case the forces_pro_server is not required anymore the path has to be adapted.
 ```bash
 cd ros2_bridge
-source source install/local_setup.bash
+source source install/setup.bash
 cd robotmpcs_ros2/scripts
 python3 make_solver.py ../config/jackal_mpc_config.yaml
 ```
 
+In case the planner should be used within a docker see [here](doc/docker_doc.md).
+
+To launch the forces_pro_service node run in a sourced terminal
 
 
 ```
+ros2 launch forces_pro_server launch_server.launch.xml
+```
 
-```
-```
-```
+
 Launch mpc planner
 ```bash
 cd ros_bridge
