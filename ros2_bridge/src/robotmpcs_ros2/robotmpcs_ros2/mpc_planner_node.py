@@ -318,7 +318,7 @@ class MPCPlannerNode(Node):
             feedback = NavigateToPose.Feedback()
             feedback.distance_remaining = 0.5 #self._remaining_distance
             goal_handle.publish_feedback(feedback)
-            rclpy.sleep(1)
+            time.sleep(1)
 
   
 

@@ -23,7 +23,7 @@ mpc_planner_node:
          wu: 0.02
          wobst: 0.5
         number_obstacles: 1
-        control_mode: "acc"
+        control_mode: "vel"
       robot:
         collision_links:
          - ee_link
