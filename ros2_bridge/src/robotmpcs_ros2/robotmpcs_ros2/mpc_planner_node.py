@@ -53,6 +53,7 @@ class MPCPlannerNode(Node):
         self.declare_parameter('mpc.model_name', 'jackal')
         self.declare_parameter('robot.end_link', 'ee_link')
         self.declare_parameter('package_path', 'default')
+        self._hostname = "luzia_Alienware_m15_R4"
 
         robot_type = self.get_parameter('mpc.model_name').get_parameter_value().string_value
         self._package_path = self.get_parameter('package_path').get_parameter_value().string_value
@@ -62,6 +63,9 @@ class MPCPlannerNode(Node):
         self._config = parse_setup(test_setup)
         self._config = self._config['mpc_planner_node']['ros__parameters']['mpc']
 
+        self._remaining_distance = 100
+        self._success = False
+        
         self.establish_ros_connections()
         self._dt = self.get_parameter('mpc.time_step').get_parameter_value().double_value
         self._rate = self.create_rate(1 / self._dt)
@@ -78,6 +82,7 @@ class MPCPlannerNode(Node):
         self.output = np.ones((self._planner._time_horizon,  self._planner._nx + self._planner._nu))
 
 
+
     def ros_solver_function(self,problem):
         
         # Sets up the request
@@ -86,9 +91,9 @@ class MPCPlannerNode(Node):
         self.req.x0.data =  [x for x in problem["x0"]]  
         self.req.xinit.data =  [x for x in problem["xinit"]]   
         self.req.params.data = [x for x in problem["all_parameters"]]  
-        self.get_logger().info("x0: " + str(self.req.x0.data))
-        self.get_logger().info("xinit: " + str(self.req.xinit.data))
-        self.get_logger().info("params: " + str(self.req.params.data))
+        #self.get_logger().info("x0: " + str(self.req.x0.data))
+        #self.get_logger().info("xinit: " + str(self.req.xinit.data))
+        #self.get_logger().info("params: " + str(self.req.params.data))
 
         self.get_logger().info("before spin reached")
         self.future = self.cli.call_async(self.req)
@@ -141,7 +146,7 @@ class MPCPlannerNode(Node):
         ])
     
     def init_visuals(self):
-        self._frame_id = "map"
+        self._frame_id = self._hostname + "_map"
         self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 15)
         
         self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
@@ -250,8 +255,6 @@ class MPCPlannerNode(Node):
         
     def _goal_cb(self, goal_msg):
         goal_position = goal_msg.data
-        # if len(goal_position) != 2:
-        #     rospy.logwarn("Goal ignored because of dimension missmatch")
         goal_dict = {
             "subgoal0": {
                 "weight": 1.0,
@@ -267,7 +270,6 @@ class MPCPlannerNode(Node):
 
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
         self._planner.setGoalReaching(self._goal)
-        #self.get_logger().info("goal set to: " + str(goal_position))
 
     def _odom_cb(self, odom_msg: Odometry):
         self._q = np.array([
@@ -280,21 +282,19 @@ class MPCPlannerNode(Node):
             odom_msg.twist.twist.linear.y,
             odom_msg.twist.twist.angular.z,
         ])
-        #self.get_logger().info("state set to: " + str(self._q))
         
     def _nmcl_cb(self, msg: PoseWithCovarianceStamped):
-        #self.get_logger().info("#####################")
         self._q = np.array([
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             get_rotation(msg.pose.pose),
         ])
-        #self.get_logger().info("state set to: " + str(self._q))
         
     async def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal request')
 
         goal_pose = goal_handle.request.pose
+        
         
         goal_dict = {
             "subgoal0": {
@@ -311,13 +311,28 @@ class MPCPlannerNode(Node):
         
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
         self._planner.setGoalReaching(self._goal)
+        
+        # Publish feedback
+
+        while self._success==False:
+            feedback = NavigateToPose.Feedback()
+            feedback.distance_remaining = 0.5 #self._remaining_distance
+            goal_handle.publish_feedback(feedback)
+            rclpy.sleep(1)
+
+  
+
+
+        goal_handle.succeed()
     
         # within_goal_tolerance = check_goal_reaching(self._q[:2], self._goal)
         # while not within_goal_tolerance:
         #     within_goal_tolerance = check_goal_reaching(self._q[:2], self._goal)
         
         result = NavigateToPose.Result()
-        result.succeeed()
+        
+        
+        
                 
             
         return result
@@ -329,9 +344,9 @@ class MPCPlannerNode(Node):
             self.get_logger().info(f'Curent state: {self._q}')
             
             self._qdot = np.array([
-            0.0,
-            0.0,
-            0.0])
+            self.output[1,3],
+            self.output[1,4],
+            self.output[1,5]])
 
             start_time = time.time()
             self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
@@ -344,6 +359,13 @@ class MPCPlannerNode(Node):
             self.get_logger().info("output" + str(self._output))
             self.get_logger().info("exitflag " + str(self._exitflag))
             self.get_logger().info("run time " + str(run_time))
+            
+            primary_goal = self._goal.primary_goal()
+            self._remaining_distance = np.linalg.norm(self._q[:2] - primary_goal.position())
+            if self._remaining_distance <= primary_goal.epsilon():
+                self._success = True
+            else:
+                self._success = False
 
             self.visualize()
             self.act()
