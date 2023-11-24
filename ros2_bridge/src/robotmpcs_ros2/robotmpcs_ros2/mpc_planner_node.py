@@ -6,7 +6,7 @@ from robotmpcs.utils.utils import parse_setup
 
 import os
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import Pose, Twist, Point, PoseWithCovarianceStamped
+from geometry_msgs.msg import Pose, Twist, Point, PoseWithCovarianceStamped, PoseStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64MultiArray
 from nav2_msgs.action import NavigateToPose
@@ -71,10 +71,11 @@ class MPCPlannerNode(Node):
         self.set_mpc_parameter()
         self.init_arrays()
         self.init_visuals()
-        self.create_timer(self._dt, self.run)
+        #self.create_timer(self._dt, self.execute_callback)
+        self.create_timer(self._dt, self._get_action)
         self.present_solver_output = np.zeros((10,self._planner._nx + self._planner._nu))
         self._exitflag = 1
-        self.output = np.zeros((self._planner._time_horizon,  self._planner._nx + self._planner._nu))
+        self.output = np.ones((self._planner._time_horizon,  self._planner._nx + self._planner._nu))
 
 
     def ros_solver_function(self,problem):
@@ -85,11 +86,9 @@ class MPCPlannerNode(Node):
         self.req.x0.data =  [x for x in problem["x0"]]  
         self.req.xinit.data =  [x for x in problem["xinit"]]   
         self.req.params.data = [x for x in problem["all_parameters"]]  
-        #self.get_logger().info("x0: " + str(self.req.x0.data))
-        #self.get_logger().info("xinit: " + str(self.req.xinit.data))
-        #self.get_logger().info("params: " + str(self.req.params.data))
-        
-
+        self.get_logger().info("x0: " + str(self.req.x0.data))
+        self.get_logger().info("xinit: " + str(self.req.xinit.data))
+        self.get_logger().info("params: " + str(self.req.params.data))
 
         self.get_logger().info("before spin reached")
         self.future = self.cli.call_async(self.req)
@@ -97,7 +96,6 @@ class MPCPlannerNode(Node):
         #rclpy.spin_until_future_complete(self, self.future, timeout_sec = None)
         self.get_logger().info("after spin reached")
         return self.present_solver_output, self._exitflag
-    
     
     def _get_solver_output_callback(self, future) -> np.ndarray:
         """
@@ -114,7 +112,7 @@ class MPCPlannerNode(Node):
 
         self.present_solver_output =  np.array(resp.output.data, dtype = np.float64)
         self._exitflag = resp.exit_code
-        
+
         return self.present_solver_output, self._exitflag
 
     
@@ -157,7 +155,6 @@ class MPCPlannerNode(Node):
         self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
         
 
-
     def init_arrays(self):
         self._action = np.zeros(2)
         self._q = np.zeros(3)
@@ -167,9 +164,9 @@ class MPCPlannerNode(Node):
     def init_planner(self):
         self._robot_type = self.get_parameter('mpc.model_name').get_parameter_value().string_value
         package_name = 'robotmpcs_ros2'
+        self.get_logger().info(self._package_path)
 
-
-        self._solver_directory = self._package_path + '/solvers/'
+        self._solver_directory = self._package_path + '/../' + 'forces_pro_server' + '/solver/'
         print(self._solver_directory)
 
         self._planner = MPCPlanner(
@@ -240,13 +237,13 @@ class MPCPlannerNode(Node):
         self._action_server = ActionServer(
             self,
             NavigateToPose,
-            'mpc/goal_pose',
-            self._goal_cb)
+            'navigate2pose',
+            self.execute_callback)
                 
         self._cmd_pub = self.create_publisher(Twist, "/luzia_Alienware_m15_R4/platform/command_limiter_node/base/cmd_vel_in_navigation", 1)
         #self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 1)
         self._nmcl_sub = self.create_subscription(PoseWithCovarianceStamped, "/NMCLPose", self._nmcl_cb, 1)
-        self._goal_sub = self.create_subscription(Float64MultiArray, "/mpc/goal", self._goal_cb, 1)
+        #self._goal_sub = self.create_subscription(PoseStamped, "/goal_pose", self._goal_cb, 1)
 
     def listener_callback(self, msg):
         self.get_logger().info('I heard: "%s"' % msg)
@@ -286,26 +283,82 @@ class MPCPlannerNode(Node):
         #self.get_logger().info("state set to: " + str(self._q))
         
     def _nmcl_cb(self, msg: PoseWithCovarianceStamped):
+        #self.get_logger().info("#####################")
         self._q = np.array([
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             get_rotation(msg.pose.pose),
         ])
+        #self.get_logger().info("state set to: " + str(self._q))
+        
+    async def execute_callback(self, goal_handle):
+        self.get_logger().info('Received goal request')
+
+        goal_pose = goal_handle.request.pose
+        
+        goal_dict = {
+            "subgoal0": {
+                "weight": 1.0,
+                "is_primary_goal": True,
+                "indices": [0, 1],
+                "parent_link": 'origin',
+                "child_link": self.get_parameter('robot.end_link').get_parameter_value().string_value,
+                "desired_position": [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                "epsilon": 0.4,
+                "type": "staticSubGoal"
+            }
+        }
+        
+        self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
+        self._planner.setGoalReaching(self._goal)
+    
+        # within_goal_tolerance = check_goal_reaching(self._q[:2], self._goal)
+        # while not within_goal_tolerance:
+        #     within_goal_tolerance = check_goal_reaching(self._q[:2], self._goal)
+        
+        result = NavigateToPose.Result()
+        result.succeeed()
+                
+            
+        return result
+    
+    def _get_action(self):
+        
+        if self._goal is not None:
+            
+            self.get_logger().info(f'Curent state: {self._q}')
+            
+            self._qdot = np.array([
+            0.0,
+            0.0,
+            0.0])
+
+            start_time = time.time()
+            self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
+            end_time = time.time()
+            run_time = end_time - start_time
+
+            # Here we print the result
+
+            #self.get_logger().info("action " + str(self._action))
+            self.get_logger().info("output" + str(self._output))
+            self.get_logger().info("exitflag " + str(self._exitflag))
+            self.get_logger().info("run time " + str(run_time))
+
+            self.visualize()
+            self.act()
 
 
     def act(self):
-        #self.get_logger().info(self._config['control_mode'])
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
             # limit to account for model errors
             vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
             vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
         elif self._config['control_mode'] == 'vel':
+            self.get_logger().info("actuate")
             vel_action = self._action
-        if check_goal_reaching(self._q[:2], self._goal):
-            vel_action = [0.0, 0.0]
-            print('GOAL REACHED')
-        elif self._exitflag > 0:
+        if self._exitflag > 0:
             self.get_logger().info("feasible")
         elif self._exitflag == 0:
             self.get_logger().info("max num iterations reached")
@@ -333,29 +386,8 @@ class MPCPlannerNode(Node):
         self.marker_publisher.publish()
 
 
-    def run(self):
-        if self._goal:
-            #self.get_logger().info("run function reached")
-            start_time = time.time()
-            
-            self._qdot = np.array([
-            self.output[0,3],
-            self.output[0,4],
-            self.output[0,5]])
+    
 
-            self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
-            end_time = time.time()
-            run_time = end_time - start_time
-
-                # Here we print the result
-
-            #self.get_logger().info("action " + str(self._action))
-            #self.get_logger().info("output" + str(output))
-            self.get_logger().info("exitflag " + str(self._exitflag))
-            self.get_logger().info("run time " + str(run_time))
-
-            self.visualize()
-            self.act()
 
 
 def main(args=None):

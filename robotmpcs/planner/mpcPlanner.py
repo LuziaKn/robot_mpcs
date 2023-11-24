@@ -1,5 +1,6 @@
 import numpy as np
 import yaml
+import time
 import os
 import sys
 #import forcespro
@@ -34,8 +35,6 @@ def output2array(output):
     for key in output.keys():
         output_array[i,:] = output[key]
         i +=1
-
-
 
     return output_array
 
@@ -72,7 +71,7 @@ class MPCPlanner(object):
         if not self._config.slack:
             self._solverFile += "_noSlack"
         if not os.path.isdir(self._solverFile):
-            raise(SolverDoesNotExistError(self._solverFile))
+                raise(SolverDoesNotExistError(self._solverFile))
         with open(self._solverFile + "/paramMap.yaml", "r") as stream:
             try:
                 self._paramMap = yaml.safe_load(stream)
@@ -87,6 +86,7 @@ class MPCPlanner(object):
         self._nu = self._properties['nu']
         self._ns = self._properties['ns']
         self._npar = self._properties['npar']
+        self._time_horizon = self._config.time_horizon
         if not self._ros:
             import forcespro
             try:
@@ -243,7 +243,7 @@ class MPCPlanner(object):
                 ] = limits_u[1][j]
 
     def setGoalReaching(self, goal):
-        print('############')
+        self._goal = goal.primary_goal().position()
         print(goal.primary_goal().position())
         for i in range(self._config.time_horizon):
             for j in range(self.m()):
@@ -303,13 +303,17 @@ class MPCPlanner(object):
 
 
         info = None
+        start_time = time.time()
         if self._ros == True:
             self.output, self._exitflag = self._solver_function(problem)
             self.output = self.output.reshape((self._config.time_horizon,self._nx + self._nu))
+
     
         else:
             self.output, self._exitflag, info = self._solver.solve(problem)
             self.output = output2array(self.output)
+        end_time = time.time()
+        self._solver_time = end_time - start_time
         
 
         # If in velocity mode, the action should be velocities instead of accelerations
@@ -344,7 +348,7 @@ class MPCPlanner(object):
         #     if self._slack > 1e-3:
         #         print("slack : ", self._slack)
         
-
+        
 
         return action, self.output, info
 
