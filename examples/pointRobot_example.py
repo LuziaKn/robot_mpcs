@@ -39,13 +39,19 @@ class PointRobotMpcExample(MpcExample):
                 [-1, 1],
                 [-15, 15],
         ])
+
+        self._limits_vel = np.array([
+                [-1, 1],
+                [-1, 1],
+                [-15, 15],
+        ])
         # Definition of the obstacle.
         static_obst_dict = {
             "type": "sphere",
             "geometry": {"position": [4.0, -0.5, 0.0], "radius": 1.0},
         }
         obst1 = SphereObstacle(name="staticObst1", content_dict=static_obst_dict)
-        self._obstacles = [obst1]
+        self._obstacles = []
         # Definition of the goal.
         goal_dict = {
             "subgoal0": {
@@ -55,6 +61,7 @@ class PointRobotMpcExample(MpcExample):
                 "parent_link": 0,
                 "child_link": self._n,
                 "desired_position": [8.2, -0.2],
+                "angle": 0.0,
                 "epsilon": 0.1,
                 "type": "staticSubGoal"
             }
@@ -65,8 +72,8 @@ class PointRobotMpcExample(MpcExample):
         self._env.reset(pos=pos0, vel=vel0)
         self._env.add_sensor(full_sensor, [0])
         self._env.add_goal(self._goal.sub_goals()[0])
-        for obstacle in self._obstacles:
-            self._env.add_obstacle(obstacle)
+        #for obstacle in self._obstacles:
+        #    self._env.add_obstacle(obstacle)
         self._env.set_spaces()
 
         for i in range(self._config['mpc']['time_horizon']):
@@ -81,10 +88,12 @@ class PointRobotMpcExample(MpcExample):
         for i in range(n_steps):
             q = ob["robot_0"]['joint_state']['position']
             qdot = ob["robot_0"]['joint_state']['velocity']
-            action, output = self._planner.computeAction(q, qdot)
+            action, output, exitflag = self._planner.computeAction(q, qdot)
             plan = []
-            for key in output:
-                plan.append(np.concatenate([output[key][:2],np.zeros(1)]))
+            for i in range(len(output)):
+                plan.append(np.concatenate([output[i, :2], np.zeros(1)]))
+            if exitflag <=0:
+                action = np.zeros((self._planner._nu))
             ob, *_ = self._env.step(action)
             self._env.update_visualizations(plan)
 

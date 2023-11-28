@@ -11,15 +11,15 @@ class VelLimitConstraints(MpcBase):
         self._paramMap = ParamMap
         self._npar = npar
 
-        self.addEntry2ParamMap("lower_limits_vel", 2)
-        self.addEntry2ParamMap("upper_limits_vel", 2)
+        self.addEntry2ParamMap("lower_limits_vel", int(self._nx/2)) #todo check if this works for all cases
+        self.addEntry2ParamMap("upper_limits_vel", int(self._nx/2))
         return self._paramMap, self._npar
 
 
     def eval_constraint(self, z, p):
         # Parameters in state boundaries?
         q, qdot, _ = self.extractVariables(z)
-        vel = qdot[-2:]
+        vel = qdot[-int(self._nx/2):]
         lower_limits = p[self._paramMap["lower_limits_vel"]]
         upper_limits = p[self._paramMap["upper_limits_vel"]]
         ineqs = []

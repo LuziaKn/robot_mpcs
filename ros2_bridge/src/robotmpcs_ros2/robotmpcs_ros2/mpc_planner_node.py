@@ -2,7 +2,9 @@
 from typing import Union
 import numpy as np
 import time
+import asyncio
 from robotmpcs.utils.utils import parse_setup
+import math
 
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -33,7 +35,7 @@ def get_rotation(pose: Pose) -> float:
     (roll, pitch, yaw) = euler_from_quaternion(orientation_list)
     return yaw
 
-
+use_visualization = True
 class MPCPlannerNode(Node):
 
     def __init__(self):
@@ -50,7 +52,7 @@ class MPCPlannerNode(Node):
 
         # Load parameters from the 'my_node' namespace
         self.declare_parameter('mpc.time_step', 0.05)
-        self.declare_parameter('mpc.model_name', 'jackal')
+        self.declare_parameter('mpc.model_name', 'pointRobot')
         self.declare_parameter('robot.end_link', 'ee_link')
         self.declare_parameter('package_path', 'default')
         self._hostname = "luzia_Alienware_m15_R4"
@@ -74,7 +76,8 @@ class MPCPlannerNode(Node):
         self.init_planner()
         self.set_mpc_parameter()
         self.init_arrays()
-        self.init_visuals()
+        if use_visualization:
+            self.init_visuals()
         #self.create_timer(self._dt, self.execute_callback)
         self.create_timer(self._dt, self._get_action)
         self.present_solver_output = np.zeros((10,self._planner._nx + self._planner._nu))
@@ -133,32 +136,40 @@ class MPCPlannerNode(Node):
         self._limits = np.array([
             [-50, 50],
             [-50, 50],
-            [-10, 10],
+            [-50, 50],
         ])
         self._limits_u = np.array([
             [-1, 1],
             [-1, 1],
+            [-15, 15],
         ])
         
         self._limits_vel = np.array([
             [-0.8, 0.8],
+            [-0.8, 0.8],
             [-2, 2],
         ])
     
-    def init_visuals(self):
-        self._frame_id = self._hostname + "_map"
-        self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 15)
-        
-        self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
-        self._visuals_goal.set_color(4, 1.0)
-        self._visuals_goal.set_scale(0.5, 0.5, 0.01)
-        self._visuals_goal.add_marker(Point(x=10.0, y=0.0, z=2.0))
-        
-        self._visuals_plan_circle = self.marker_publisher.get_circle(self._frame_id)
-        self._visuals_plan_circle.set_color(7, 0.5)
-        self._visuals_plan_circle.set_scale(0.5, 0.5, 0.01)
-        self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
-        
+    if use_visualization:
+        def init_visuals(self):
+            self._frame_id = self._hostname + "_map"
+            self.marker_publisher = ROSMarkerPublisher(self, "ros_tools/mpc/visuals", self._frame_id, 15)
+            
+            self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
+            self._visuals_goal.set_color(4, 1.0)
+            self._visuals_goal.set_scale(0.5, 0.5, 0.01)
+            self._visuals_goal.add_marker(Point(x=10.0, y=0.0, z=2.0))
+            
+            self._visuals_goal_angle = self.marker_publisher.get_line(self._frame_id)
+            self._visuals_goal_angle.set_color(4, 1.0)
+            self._visuals_goal_angle.set_scale(0.1)
+            self._visuals_goal_angle.add_line(Point(x=10.0, y=0.0, z=2.0), Point(x=11.0, y=0.0, z=2.0))
+            
+            self._visuals_plan_circle = self.marker_publisher.get_circle(self._frame_id)
+            self._visuals_plan_circle.set_color(7, 0.5)
+            self._visuals_plan_circle.set_scale(0.5, 0.5, 0.01)
+            self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
+            
 
     def init_arrays(self):
         self._action = np.zeros(2)
@@ -287,10 +298,10 @@ class MPCPlannerNode(Node):
         self._q = np.array([
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
-            get_rotation(msg.pose.pose),
+            msg.pose.pose.position.z,
         ])
         
-    async def execute_callback(self, goal_handle):
+    def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal request')
 
         goal_pose = goal_handle.request.pose
@@ -304,6 +315,7 @@ class MPCPlannerNode(Node):
                 "parent_link": 'origin',
                 "child_link": self.get_parameter('robot.end_link').get_parameter_value().string_value,
                 "desired_position": [goal_pose.pose.position.x, goal_pose.pose.position.y],
+                "angle": get_rotation(goal_pose.pose), 
                 "epsilon": 0.4,
                 "type": "staticSubGoal"
             }
@@ -314,11 +326,11 @@ class MPCPlannerNode(Node):
         
         # Publish feedback
 
-        while self._success==False:
-            feedback = NavigateToPose.Feedback()
-            feedback.distance_remaining = 0.5 #self._remaining_distance
-            goal_handle.publish_feedback(feedback)
-            time.sleep(1)
+        # while self._success==False:
+        #     feedback = NavigateToPose.Feedback()
+        #     #feedback.distance_remaining = self._remaining_distance
+        #     goal_handle.publish_feedback(feedback)
+        #     time.sleep(1)
 
   
 
@@ -341,12 +353,16 @@ class MPCPlannerNode(Node):
         
         if self._goal is not None:
             
-            self.get_logger().info(f'Curent state: {self._q}')
+            #self.get_logger().info(f'Curent state: {self._q}')
             
+            # self._qdot = np.array([
+            # self.output[1,3],
+            # self.output[1,4],
+            # self.output[1,5]])
             self._qdot = np.array([
-            self.output[1,3],
-            self.output[1,4],
-            self.output[1,5]])
+                0.0,
+                0.0,
+                0.0])
 
             start_time = time.time()
             self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
@@ -355,10 +371,10 @@ class MPCPlannerNode(Node):
 
             # Here we print the result
 
-            #self.get_logger().info("action " + str(self._action))
-            self.get_logger().info("output" + str(self._output))
+            self.get_logger().info("action " + str(self._action))
+            #self.get_logger().info("output" + str(self._output))
             self.get_logger().info("exitflag " + str(self._exitflag))
-            self.get_logger().info("run time " + str(run_time))
+            #self.get_logger().info("run time " + str(run_time))
             
             primary_goal = self._goal.primary_goal()
             self._remaining_distance = np.linalg.norm(self._q[:2] - primary_goal.position())
@@ -367,7 +383,8 @@ class MPCPlannerNode(Node):
             else:
                 self._success = False
 
-            self.visualize()
+            if use_visualization:
+                self.visualize()
             self.act()
 
 
@@ -384,28 +401,34 @@ class MPCPlannerNode(Node):
             self.get_logger().info("feasible")
         elif self._exitflag == 0:
             self.get_logger().info("max num iterations reached")
-            vel_action = [0.0, 0.0]
+            vel_action = [0.0, 0.0, 0.0]
         else:
             self.get_logger().info("infeasible")
-            vel_action = [0.0, 0.0]
+            vel_action = [0.0, 0.0, 0.0]
         cmd_msg = Twist()
         cmd_msg.linear.x = vel_action[0]
-        cmd_msg.angular.z = vel_action[1]
+        cmd_msg.linear.y = vel_action[1]
+        cmd_msg.angular.z = vel_action[2]
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
 
-    def visualize(self):
-        
-        if self._goal is not None:
-            goal_position = Point(x=self._goal.primary_goal().position()[0], y=self._goal.primary_goal().position()[1], z=0.01)
-            self._visuals_goal.add_marker(goal_position)
+    if use_visualization:
+        def visualize(self):
             
-            for state in self._output:
-                position = Point(x=state[0], y=state[1], z=0.01)
-                self._visuals_plan_circle.add_marker(position)
-                
+            if self._goal is not None:
+                goal_position = Point(x=self._goal.primary_goal().position()[0], y=self._goal.primary_goal().position()[1], z=0.01)
+                self._visuals_goal.add_marker(goal_position)
+                d = 1
+                helper_point = Point(x=goal_position.x+d*np.cos(self._goal.primary_goal().angle()), y= goal_position.y+d*np.sin(self._goal.primary_goal().angle()), z=goal_position.z)
 
-        self.marker_publisher.publish()
+                self._visuals_goal_angle.add_line(goal_position,helper_point)
+                
+                for state in self._output:
+                    position = Point(x=state[0], y=state[1], z=0.01)
+                    self._visuals_plan_circle.add_marker(position)
+                    
+
+            self.marker_publisher.publish()
 
 
     

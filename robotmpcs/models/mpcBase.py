@@ -68,6 +68,7 @@ class MpcBase(object):
         self._m_obst = 3
         self._pairs = []
         self._N = self._config.time_horizon
+        self._onlyN = False
 
     def addEntry2ParamMap(self, name, n_par):
         if name not in self._paramMap:

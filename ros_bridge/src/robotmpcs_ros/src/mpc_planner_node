@@ -140,7 +140,6 @@ class MPCNode():
         while not rospy.is_shutdown():
             if self._goal:
                 self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
-            #self._action = np.array([1.0, 0.2])
             rospy.loginfo(self._action)
             self.act()
             self._rate.sleep()

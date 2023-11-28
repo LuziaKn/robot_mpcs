@@ -33,4 +33,10 @@ def check_goal_reaching(pos, goal):
     goal_dist = np.linalg.norm(pos[:2] - primary_goal.position()) # todo remove hard coded dimension, replace it with fk instead
     if goal_dist <= primary_goal.epsilon():
         return True
-    return False
+    return False, goal_dist
+
+def shift_angle_casadi(angle_var):
+    # Shift angle to be within the range [-π, π]
+    shifted_angle = ca.fmod(angle_var + ca.pi, 2 * ca.pi) - ca.pi
+
+    return shifted_angle

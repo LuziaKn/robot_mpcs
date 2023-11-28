@@ -8,10 +8,11 @@ mpc:
   interval: 1
   initialization: "current_state"
   constraints:
-    - 'RadialConstraints'
+    #- 'RadialConstraints'
     - 'SelfCollisionAvoidanceConstraints'
     - 'JointLimitConstraints'
     - 'InputLimitConstraints'
+    - 'VelLimitConstraints'
   objectives:
     - 'GoalReaching'
     - 'ConstraintAvoidance'

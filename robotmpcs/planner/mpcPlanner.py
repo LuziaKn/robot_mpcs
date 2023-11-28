@@ -8,7 +8,6 @@ from robotmpcs.models.mpcBase import MpcConfiguration
 from robotmpcs.planner.sensor_conversion.free_space_decomposition import FreeSpaceDecomposition
 
 
-
 class SolverDoesNotExistError(Exception):
     def __init__(self, solverName):
         super().__init__()
@@ -30,7 +29,11 @@ class EmptyObstacle():
 def output2array(output):
     i = 0
     N = len(output)
-    dec = int(N//10+1)
+    num_str = str(N)
+
+    dec= len(num_str)
+
+    #dec = int(N//10+1)
     output_array = np.zeros((N,len(output["x{:0{}d}".format(1, dec)])))
     for key in output.keys():
         output_array[i,:] = output[key]
@@ -251,7 +254,10 @@ class MPCPlanner(object):
                     position = 0
                 else:
                     position = goal.primary_goal().position()[j]
-                self._params[self._npar * i + self._paramMap["goal"][j]] = position
+                self._params[self._npar * i + self._paramMap["goal_position"][j]] = position
+            if True:
+                self._params[self._npar * i + self._paramMap["goal_angle"][0]] = goal.primary_goal().angle()
+                
 
     def setConstraintAvoidance(self):
         for i in range(self._config.time_horizon):
