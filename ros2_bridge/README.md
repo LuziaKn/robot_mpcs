@@ -1,4 +1,4 @@
-# Robot MPC Ros2 Wrapper
+# Robot MPC Ros2 Wrapper [Warning: under development]
 
 Simple ros-humble wrapper for robotmpcs.
 
