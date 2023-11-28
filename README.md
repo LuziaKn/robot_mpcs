@@ -1,8 +1,14 @@
 # Robot mpcs
+This repository presents an implementation of Model Predictive Control (MPC) for a variety of robotic systems and tasks. The implementation is completely independent of the Robot Operating System (ROS) but can be combined with ROS1 via our [ROS1-bridge](ros_bridge/README.md) and with ROS2 via our [ROS2-bridge](ros2_bridge/README.md).
+Currently, we use Embotechs ForcesPro solver to solve the MPC problem. More information can be found [here](https://forces.embotech.com/). 
 
 ## Install forces pro
 You have to request a license for [forcespro](https://forces.embotech.com/) and install it
-according to their documentation.
+according to their [documentation](https://forces.embotech.com/Documentation/installation/obtaining.html#sec-obtaining).
+Helful information about assigning the license to your computer can be found [here](https://my.embotech.com/manual/system_information).
+
+To make use of the ForcesPro solver with python follow their instructions [here](https://forces.embotech.com/Documentation/installation/python.html#python).
+
 The location of the python package `forcespro` must also be included in your python path.
 ```bash
 export PYTHONPATH="${PYTHONPATH}:/path/to/forces/pro"
