@@ -28,6 +28,8 @@ from ros2_bridge.src.ros_tools.ros_tools.ros_visuals_py import ROSMarkerPublishe
 
 from forces_pro_server.srv import CallForcesPro
 
+from copy import deepcopy
+
 
 def get_rotation(pose: Pose) -> float:
     orientation_q = pose.orientation
@@ -96,7 +98,7 @@ class MPCPlannerNode(Node):
         self.req.params.data = [x for x in problem["all_parameters"]]  
         #self.get_logger().info("x0: " + str(self.req.x0.data))
         #self.get_logger().info("xinit: " + str(self.req.xinit.data))
-        #self.get_logger().info("params: " + str(self.req.params.data))
+        self.get_logger().info("params: " + str(self.req.params.data))
 
         self.get_logger().info("before spin reached")
         self.future = self.cli.call_async(self.req)
@@ -133,11 +135,11 @@ class MPCPlannerNode(Node):
         sphereObst1 = SphereObstacle(name="simpleSphere", content_dict=obst1Dict)
         self._obstacles = [sphereObst1]
         self._r_body = 0.6
-        self._limits = np.array([
-            [-50, 50],
-            [-50, 50],
-            [-50, 50],
-        ])
+        # self._limits = np.array([
+        #     [-50, 50],
+        #     [-50, 50],
+        #     [-6, 6],
+        # ])
         self._limits_u = np.array([
             [-1, 1],
             [-1, 1],
@@ -147,7 +149,7 @@ class MPCPlannerNode(Node):
         self._limits_vel = np.array([
             [-0.8, 0.8],
             [-0.8, 0.8],
-            [-2, 2],
+            [-5, 5],
         ])
     
     if use_visualization:
@@ -298,8 +300,10 @@ class MPCPlannerNode(Node):
         self._q = np.array([
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
-            msg.pose.pose.position.z,
+            get_rotation(msg.pose.pose),
         ])
+        self.get_logger().info('Pose #######' + str(get_rotation(msg.pose.pose)))
+        
         
     def execute_callback(self, goal_handle):
         self.get_logger().info('Received goal request')
@@ -359,10 +363,7 @@ class MPCPlannerNode(Node):
             # self.output[1,3],
             # self.output[1,4],
             # self.output[1,5]])
-            self._qdot = np.array([
-                0.0,
-                0.0,
-                0.0])
+
 
             start_time = time.time()
             self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
@@ -372,7 +373,7 @@ class MPCPlannerNode(Node):
             # Here we print the result
 
             self.get_logger().info("action " + str(self._action))
-            #self.get_logger().info("output" + str(self._output))
+            self.get_logger().info("output" + str(self._output))
             self.get_logger().info("exitflag " + str(self._exitflag))
             #self.get_logger().info("run time " + str(run_time))
             
@@ -389,11 +390,13 @@ class MPCPlannerNode(Node):
 
 
     def act(self):
+        self.get_logger().info("Control Mode: " + self._config['control_mode'])
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
             # limit to account for model errors
-            vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
-            vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
+            #vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
+            #vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
+            #vel_action[2] = np.clip(vel_action[2], 0.9*self._limits_vel[2][0], 0.9*self._limits_vel[2][1])
         elif self._config['control_mode'] == 'vel':
             self.get_logger().info("actuate")
             vel_action = self._action
@@ -405,12 +408,21 @@ class MPCPlannerNode(Node):
         else:
             self.get_logger().info("infeasible")
             vel_action = [0.0, 0.0, 0.0]
+        # transfer to robot-frame
+        vel_action_ego = deepcopy(vel_action)
+        theta = self._q[-1]
+        c, s = np.cos(theta), np.sin(theta)
+        R = np.array(((c, s), (-s, c)))
+        vel_action_ego[:2] = np.dot(R, vel_action[:2])
         cmd_msg = Twist()
-        cmd_msg.linear.x = vel_action[0]
-        cmd_msg.linear.y = vel_action[1]
-        cmd_msg.angular.z = vel_action[2]
+        cmd_msg.linear.x = vel_action_ego[0]
+        cmd_msg.linear.y = vel_action_ego[1]
+        #cmd_msg.angular.z = vel_action[2]
+        
         self._cmd_pub.publish(cmd_msg)
-        self._qudot = vel_action
+        self._qdot = vel_action
+        self.get_logger().info("vel action" + str(vel_action))
+        
 
     if use_visualization:
         def visualize(self):

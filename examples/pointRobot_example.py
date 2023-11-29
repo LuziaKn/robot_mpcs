@@ -60,7 +60,7 @@ class PointRobotMpcExample(MpcExample):
                 "indices": [0, 1],
                 "parent_link": 0,
                 "child_link": self._n,
-                "desired_position": [8.2, -0.2],
+                "desired_position": [8.2, -3],
                 "angle": 0.0,
                 "epsilon": 0.1,
                 "type": "staticSubGoal"

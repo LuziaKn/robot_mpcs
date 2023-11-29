@@ -9,7 +9,7 @@ import yaml
 from shutil import move, rmtree
 from glob import glob
 from robotmpcs.models.mpcBase import MpcBase
-from robotmpcs.models.objectives.goal_mpc_objective import GoalMpcObjective
+#from robotmpcs.models.objectives.goal_mpc_objective import Goal_reaMpcObjective
 from robotmpcs.models.inequalities.InequalityManager import InequalityManager
 from robotmpcs.models.objectives.ObjectiveManager import ObjectiveManager
 

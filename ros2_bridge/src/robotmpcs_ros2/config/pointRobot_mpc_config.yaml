@@ -9,16 +9,16 @@ mpc_planner_node:
         slack: False
         interval: 1
         initialization: "current_state"
-        constraints: 
-          - JointLimitConstraints
-          - InputLimitConstraints
+        constraints: []
+          #- InputLimitConstraints
+          #- VelLimitConstraints
         objectives:
          - 'GoalReaching'
         weights:
          w: 1.0
          wvel: [0.0, 0.0, 0.0, 1.0, 0.01]
          ws: 1e10
-         wu: 0.02
+         wu: 0.1
          wobst: 0.5
         number_obstacles: 1
         control_mode: "vel"

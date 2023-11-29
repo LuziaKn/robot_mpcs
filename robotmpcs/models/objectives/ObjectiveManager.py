@@ -31,7 +31,6 @@ class ObjectiveManager(MpcBase):
 
         J = 0
         for module in self.objective_modules:
-            if module._onlyN:
                 J += module.eval_objective(z,p)
         _, _, qddot, *_ = self.extractVariables(z)
         Ju = ca.dot(qddot, ca.mtimes(Wu, qddot))

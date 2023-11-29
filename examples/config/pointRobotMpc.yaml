@@ -7,15 +7,11 @@ mpc:
   slack: False
   interval: 1
   initialization: "current_state"
-  constraints:
-    #- 'RadialConstraints'
-    - 'SelfCollisionAvoidanceConstraints'
-    - 'JointLimitConstraints'
-    - 'InputLimitConstraints'
-    - 'VelLimitConstraints'
+  constraints: []
+    #- 'RadialConstraints
+
   objectives:
     - 'GoalReaching'
-    - 'ConstraintAvoidance'
   weights:
     w: 1.0
     wvel: [1.0, 1.0, 1.0]
@@ -24,7 +20,7 @@ mpc:
     wobst: 0.05
     wconstr: [0.5, 0.0, 0.0, 0.0]
   number_obstacles: 1
-  control_mode: "acc"
+  control_mode: "vel"
 robot:
   collision_links: 
     - base_link
