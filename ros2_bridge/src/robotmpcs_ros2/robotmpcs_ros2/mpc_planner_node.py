@@ -29,7 +29,10 @@ from ros2_bridge.src.ros_tools.ros_tools.ros_visuals_py import ROSMarkerPublishe
 from forces_pro_server.srv import CallForcesPro
 
 from copy import deepcopy
+from robotmpcs.utils.utils import shift_angle_casadi
 
+def rad2deg(angle_rad):
+    return angle_rad * 180/np.pi
 
 def get_rotation(pose: Pose) -> float:
     orientation_q = pose.orientation
@@ -97,7 +100,7 @@ class MPCPlannerNode(Node):
         self.req.xinit.data =  [x for x in problem["xinit"]]   
         self.req.params.data = [x for x in problem["all_parameters"]]  
         #self.get_logger().info("x0: " + str(self.req.x0.data))
-        #self.get_logger().info("xinit: " + str(self.req.xinit.data))
+        self.get_logger().info("xinit: " + str(self.req.xinit.data))
         self.get_logger().info("params: " + str(self.req.params.data))
 
         self.get_logger().info("before spin reached")
@@ -143,13 +146,13 @@ class MPCPlannerNode(Node):
         self._limits_u = np.array([
             [-1, 1],
             [-1, 1],
-            [-15, 15],
+            [-5, 5],
         ])
         
         self._limits_vel = np.array([
             [-0.8, 0.8],
             [-0.8, 0.8],
-            [-5, 5],
+            [-1, 1],
         ])
     
     if use_visualization:
@@ -378,8 +381,9 @@ class MPCPlannerNode(Node):
             #self.get_logger().info("run time " + str(run_time))
             
             primary_goal = self._goal.primary_goal()
+            angle_error = shift_angle_casadi(self._goal.primary_goal().angle() - self._q[2])
             self._remaining_distance = np.linalg.norm(self._q[:2] - primary_goal.position())
-            if self._remaining_distance <= primary_goal.epsilon():
+            if self._remaining_distance <= primary_goal.epsilon() and angle_error<0.01:
                 self._success = True
             else:
                 self._success = False
@@ -387,10 +391,13 @@ class MPCPlannerNode(Node):
             if use_visualization:
                 self.visualize()
             self.act()
-
+            
+            self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
+            self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
+            self.get_logger().info("error angle" + str(rad2deg(angle_error)))
 
     def act(self):
-        self.get_logger().info("Control Mode: " + self._config['control_mode'])
+        #self.get_logger().info("Control Mode: " + self._config['control_mode'])
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
             # limit to account for model errors
@@ -414,10 +421,11 @@ class MPCPlannerNode(Node):
         c, s = np.cos(theta), np.sin(theta)
         R = np.array(((c, s), (-s, c)))
         vel_action_ego[:2] = np.dot(R, vel_action[:2])
+        vel_action_ego[2] += 0.0
         cmd_msg = Twist()
         cmd_msg.linear.x = vel_action_ego[0]
         cmd_msg.linear.y = vel_action_ego[1]
-        #cmd_msg.angular.z = vel_action[2]
+        cmd_msg.angular.z = vel_action_ego[2]
         
         self._cmd_pub.publish(cmd_msg)
         self._qdot = vel_action

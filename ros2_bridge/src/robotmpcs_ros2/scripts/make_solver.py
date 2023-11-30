@@ -22,8 +22,11 @@ def main(robot_type, setup_file):
     mpc_model.setCodeoptions()
     path_to_solvers = os.path.dirname(os.path.abspath(__file__)) + '/../../forces_pro_server/solver/'
     mpc_model.generateSolver(location=path_to_solvers)
-    print(setup['mpc']['constraints'])
-    print(setup['mpc']['objectives'])
+    print(" ")
+    print('The generated solver considers the following constraints and objectives: ')
+    print("constraints: " + str(setup['mpc']['constraints']))
+    print("objectives: " + str(setup['mpc']['objectives']))
+    print("The solver generation was successful. Happy solving! :)")
 
 if __name__ == "__main__":
     #robot_type = re.findall('\/(\S*)M', sys.argv[1])[0]

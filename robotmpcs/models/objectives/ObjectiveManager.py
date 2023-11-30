@@ -29,6 +29,7 @@ class ObjectiveManager(MpcBase):
         wu = p[self._paramMap["wu"]]
         Wu = diagSX(wu, self._nu)
 
+
         J = 0
         for module in self.objective_modules:
                 J += module.eval_objective(z,p)

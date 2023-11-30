@@ -13,7 +13,8 @@ class GoalReaching(MpcBase):
 
         self.addEntry2ParamMap("goal_position", self._m)
         self.addEntry2ParamMap("goal_angle", 1)
-        self.addEntry2ParamMap("wgoal", self._m)
+        self.addEntry2ParamMap("wgoal_position", self._m)
+        self.addEntry2ParamMap("wgoal_angle", 1)
 
         self._onlyN = True
         return self._paramMap, self._npar
@@ -30,11 +31,15 @@ class GoalReaching(MpcBase):
         )
         goal_position = p[self._paramMap["goal_position"]]
         goal_angle = p[self._paramMap["goal_angle"]]
-        w = p[self._paramMap["wgoal"]]
-        W = diagSX(w, 2)
-        W_angle = diagSX(0.5 * w, 1)
+        w_position = p[self._paramMap["wgoal_position"]]
+        w_angle = p[self._paramMap["wgoal_angle"]]
+        W = diagSX(w_position, 2)
+        W_angle = diagSX(w_angle, 1)
         err = pos_ee[0:2,3] - goal_position[:2]
-        err_angle = shift_angle_casadi(ca.acos(pos_ee[0,0])) - shift_angle_casadi(goal_angle)
-        Jgoal = ca.dot(err, ca.mtimes(W, err)) #+ ca.dot(err_angle, ca.mtimes(W_angle, err_angle))
-
+        dist = ca.fmax(ca.sqrt(err[0]**2 + err[1]**2),0.1)
+        err_normalized = err/dist
+        #err_angle = q[2]# - goal_angle
+        err_angle = shift_angle_casadi(goal_angle - q[2])
+        
+        Jgoal =  ca.dot(err, ca.mtimes(W, err)) + ca.dot(err_angle, ca.mtimes(W_angle, err_angle)) 
         return Jgoal

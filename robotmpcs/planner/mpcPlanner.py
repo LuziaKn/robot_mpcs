@@ -120,9 +120,9 @@ class MPCPlanner(object):
         #self._x0[-1, -1] = 0.1 # todo why?
         self._params = np.zeros(shape=(self._npar * self._config.time_horizon), dtype=float)
         for i in range(self._config.time_horizon):
-            self._params[
-                [self._npar * i + val for val in self._paramMap["wgoal"]]
-            ] = self._config.weights["w"]
+            # self._params[
+            #     [self._npar * i + val for val in self._paramMap["wgoal"]]
+            # ] = self._config.weights["w"]
             # for j, val in enumerate(self._paramMap["wvel"]):
             #     self._params[[self._npar * i + val]] = self._config.weights["wvel"][j]
             self._params[
@@ -258,12 +258,17 @@ class MPCPlanner(object):
             if True:
                 self._params[self._npar * i + self._paramMap["goal_angle"][0]] = goal.primary_goal().angle()
             # weights
-            w_goal = self._config.weights["w"]  
+            w_goal_position = self._config.weights["w"]  
+            w_goal_angle = self._config.weights["w_goal_angle"] 
             if i != self._config.time_horizon-1:
-                w_goal = 0.0
+                w_goal_position = 0.0
+                w_goal_angle = 0.0
             self._params[
-                [self._npar * i + val for val in self._paramMap["wgoal"]]
-            ] =   w_goal
+                [self._npar * i + val for val in self._paramMap["wgoal_position"]]
+            ] =   w_goal_position
+            self._params[
+                [self._npar * i + val for val in self._paramMap["wgoal_angle"]]
+            ] =   w_goal_angle
 
     def setConstraintAvoidance(self):
         for i in range(self._config.time_horizon):
