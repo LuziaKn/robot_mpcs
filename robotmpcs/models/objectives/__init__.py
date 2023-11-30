@@ -1,3 +1,4 @@
 from robotmpcs.models.objectives.goal_pose_reaching import GoalPoseReaching
 from robotmpcs.models.objectives.goal_position_reaching import GoalPositionReaching
+from robotmpcs.models.objectives.heading_reaching import HeadingReaching
 from robotmpcs.models.objectives.constraint_avoidance import ConstraintAvoidance

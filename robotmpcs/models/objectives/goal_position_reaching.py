@@ -16,7 +16,7 @@ class GoalPositionReaching(MpcBase):
         self.addEntry2ParamMap("wgoal_position", self._m)
         self.addEntry2ParamMap("wgoal_angle", 1)
 
-        self._onlyN = True
+
         return self._paramMap, self._npar
 
 

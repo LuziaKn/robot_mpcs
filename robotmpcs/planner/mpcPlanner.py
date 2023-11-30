@@ -245,7 +245,7 @@ class MPCPlanner(object):
                     self._npar * i + self._paramMap["upper_limits_u"][j]
                 ] = limits_u[1][j]
 
-    def setGoalReaching(self, goal):
+    def setGoalReaching(self, goal, active_states = np.ones((100,1))):
         self._goal = goal.primary_goal().position()
         print(goal.primary_goal().position())
         for i in range(self._config.time_horizon):
@@ -260,7 +260,7 @@ class MPCPlanner(object):
             # weights
             w_goal_position = self._config.weights["w"]  
             w_goal_angle = self._config.weights["w_goal_angle"] 
-            if i != self._config.time_horizon-1:
+            if active_states[i] == 0:
                 w_goal_position = 0.0
                 w_goal_angle = 0.0
             self._params[
@@ -269,6 +269,17 @@ class MPCPlanner(object):
             self._params[
                 [self._npar * i + val for val in self._paramMap["wgoal_angle"]]
             ] =   w_goal_angle
+
+    def setHeadingReaching(self, active_states = np.ones((100,1))):
+        for i in range(self._config.time_horizon):
+            # weights
+            w_heading = self._config.weights["w_heading"]  
+
+            if active_states[i] == 0:
+                w_heading = 0.0
+            self._params[
+                [self._npar * i + val for val in self._paramMap["wheading"]]
+            ] =   w_heading
 
     def setConstraintAvoidance(self):
         for i in range(self._config.time_horizon):

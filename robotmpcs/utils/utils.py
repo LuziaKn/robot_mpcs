@@ -37,6 +37,7 @@ def check_goal_reaching(pos, goal):
 
 def shift_angle_casadi(angle_var):
     # Shift angle to be within the range [-π, π]
-    shifted_angle = ca.fmod(angle_var + ca.pi, 2 * ca.pi) - ca.pi
+    shifted_angle = ca.if_else(angle_var > ca.pi, angle_var - 2 * ca.pi, angle_var)
+    shifted_angle = ca.if_else(angle_var < -ca.pi, angle_var + 2 * ca.pi, angle_var)
 
     return shifted_angle

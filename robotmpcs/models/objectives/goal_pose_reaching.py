@@ -16,7 +16,6 @@ class GoalPoseReaching(MpcBase):
         self.addEntry2ParamMap("wgoal_position", self._m)
         self.addEntry2ParamMap("wgoal_angle", 1)
 
-        self._onlyN = True
         return self._paramMap, self._npar
 
 
@@ -41,7 +40,7 @@ class GoalPoseReaching(MpcBase):
         dist = ca.fmax(ca.sqrt(err[0]**2 + err[1]**2),0.01)
         err_normalized = err/dist
 
-        err_angle = shift_angle_casadi(goal_angle - ca.acos(transf_ee[0,0]))
+        err_angle = shift_angle_casadi(goal_angle - q[2])
         
-        Jgoal =  ca.dot(err_normalized, ca.mtimes(W, err_normalized)) + ca.dot(err_angle, ca.mtimes(W_angle, err_angle)) 
+        Jgoal =  ca.dot(err, ca.mtimes(W, err)) + ca.dot(err_angle, ca.mtimes(W_angle, err_angle)) 
         return Jgoal

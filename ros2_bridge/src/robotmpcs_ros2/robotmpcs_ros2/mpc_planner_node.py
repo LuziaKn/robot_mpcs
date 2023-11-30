@@ -206,9 +206,11 @@ class MPCPlannerNode(Node):
         print(objectives)
 
         for objective in objectives:
-            if objective == 'GoalReaching':
+            if objective == 'GoalPoseReaching':
                 try:
-                    self._planner.setGoalReaching(self._goal)
+                    active_states = np.zeros((self._planner._time_horizon,1))
+                    active_states[-1] = 1.0
+                    self._planner.setGoalReaching(self._goal, active_states)
                 except AttributeError:
                     print('The required attributes for setting ' + objective + ' are not defined')
             elif objective == 'ConstraintAvoidance':
@@ -216,6 +218,15 @@ class MPCPlannerNode(Node):
                     self._planner.setConstraintAvoidance()
                 except KeyError:
                     print('The required attributes for setting ' + objective + ' are not defined in the config file')
+            elif objective == 'HeadingReaching':
+                try:
+                    active_states = np.ones((self._planner._time_horizon,1))
+                    active_states[-1] = 0.0
+                    self._planner.setHeadingReaching(active_states)
+                except KeyError:
+                    print('The required attributes for setting ' + objective + ' are not defined in the config file')
+            
+                
             else:
                 print('No function to set the parameters for this objective is defined')
 
@@ -394,10 +405,11 @@ class MPCPlannerNode(Node):
             if use_visualization:
                 self.visualize()
             self.act()
-            
-            #self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
-            #self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
-            #self.get_logger().info("error angle" + str(rad2deg(angle_error)))
+            heading = np.arctan2(self._q[1],self._q[0])
+            self.get_logger().info("heading. robot " + str(rad2deg(heading)))
+            self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
+            self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
+            self.get_logger().info("error angle" + str(rad2deg(angle_error)))
 
     def act(self):
         #self.get_logger().info("Control Mode: " + self._config['control_mode'])
