@@ -28,7 +28,7 @@ In case the forces_pro_server is not required anymore the path has to be adapted
 
 ```bash
 cd ros2_bridge/robotmpcs_ros2/scripts
-python3 make_solver.py ../config/jackal_mpc_config.yaml
+python3 make_solver.py ../config/pointRobot_mpc_config.yaml
 ```
 
 ## Forces Pro Server
@@ -68,7 +68,7 @@ The following things need to be run:
 - The main MPC node
     ```
   cd ros2_bridge/src/robotmpcs_ros2/launch
-  ros2 launch ./jackal_mpc.launch.py 
+  ros2 launch ./pointRobot_mpc.launch.py 
   ```
 - The action client used to provide a NavigateToGoal action using eviz
   ```
