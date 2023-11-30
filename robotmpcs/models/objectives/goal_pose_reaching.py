@@ -2,7 +2,7 @@ import casadi as ca
 from robotmpcs.models.mpcBase import MpcBase
 from robotmpcs.models.utils.utils import diagSX
 from robotmpcs.utils.utils import shift_angle_casadi
-class GoalReaching(MpcBase):
+class GoalPoseReaching(MpcBase):
 
     def __init__(self,ineq_modules, **kwargs):
         super().__init__(**kwargs)
@@ -23,7 +23,7 @@ class GoalReaching(MpcBase):
     def eval_objective(self, z, p):
         variables = self.extractVariables(z)
         q = variables[0]
-        pos_ee = self._fk.fk(
+        transf_ee = self._fk.fk(
             q,
             self._robot_config.root_link,
             self._robot_config.end_link,
@@ -31,15 +31,17 @@ class GoalReaching(MpcBase):
         )
         goal_position = p[self._paramMap["goal_position"]]
         goal_angle = p[self._paramMap["goal_angle"]]
+        
         w_position = p[self._paramMap["wgoal_position"]]
         w_angle = p[self._paramMap["wgoal_angle"]]
         W = diagSX(w_position, 2)
         W_angle = diagSX(w_angle, 1)
-        err = pos_ee[0:2,3] - goal_position[:2]
-        dist = ca.fmax(ca.sqrt(err[0]**2 + err[1]**2),0.1)
-        err_normalized = err/dist
-        #err_angle = q[2]# - goal_angle
-        err_angle = shift_angle_casadi(goal_angle - q[2])
         
-        Jgoal =  ca.dot(err, ca.mtimes(W, err)) + ca.dot(err_angle, ca.mtimes(W_angle, err_angle)) 
+        err = transf_ee[0:2,3] - goal_position[:2]
+        dist = ca.fmax(ca.sqrt(err[0]**2 + err[1]**2),0.01)
+        err_normalized = err/dist
+
+        err_angle = shift_angle_casadi(goal_angle - ca.acos(transf_ee[0,0]))
+        
+        Jgoal =  ca.dot(err_normalized, ca.mtimes(W, err_normalized)) + ca.dot(err_angle, ca.mtimes(W_angle, err_angle)) 
         return Jgoal

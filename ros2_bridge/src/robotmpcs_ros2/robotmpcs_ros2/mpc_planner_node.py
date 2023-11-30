@@ -100,14 +100,14 @@ class MPCPlannerNode(Node):
         self.req.xinit.data =  [x for x in problem["xinit"]]   
         self.req.params.data = [x for x in problem["all_parameters"]]  
         #self.get_logger().info("x0: " + str(self.req.x0.data))
-        self.get_logger().info("xinit: " + str(self.req.xinit.data))
-        self.get_logger().info("params: " + str(self.req.params.data))
+        #self.get_logger().info("xinit: " + str(self.req.xinit.data))
+        #self.get_logger().info("params: " + str(self.req.params.data))
 
-        self.get_logger().info("before spin reached")
+        #self.get_logger().info("before spin reached")
         self.future = self.cli.call_async(self.req)
         self.future.add_done_callback(self._get_solver_output_callback)
         #rclpy.spin_until_future_complete(self, self.future, timeout_sec = None)
-        self.get_logger().info("after spin reached")
+        #self.get_logger().info("after spin reached")
         return self.present_solver_output, self._exitflag
     
     def _get_solver_output_callback(self, future) -> np.ndarray:
@@ -305,7 +305,7 @@ class MPCPlannerNode(Node):
             msg.pose.pose.position.y,
             get_rotation(msg.pose.pose),
         ])
-        self.get_logger().info('Pose #######' + str(get_rotation(msg.pose.pose)))
+        #self.get_logger().info('Pose #######' + str(get_rotation(msg.pose.pose)))
         
         
     def execute_callback(self, goal_handle):
@@ -323,7 +323,7 @@ class MPCPlannerNode(Node):
                 "child_link": self.get_parameter('robot.end_link').get_parameter_value().string_value,
                 "desired_position": [goal_pose.pose.position.x, goal_pose.pose.position.y],
                 "angle": get_rotation(goal_pose.pose), 
-                "epsilon": 0.4,
+                "epsilon": 0.2,
                 "type": "staticSubGoal"
             }
         }
@@ -375,16 +375,19 @@ class MPCPlannerNode(Node):
 
             # Here we print the result
 
-            self.get_logger().info("action " + str(self._action))
-            self.get_logger().info("output" + str(self._output))
-            self.get_logger().info("exitflag " + str(self._exitflag))
+            #self.get_logger().info("action " + str(self._action))
+            #self.get_logger().info("output" + str(self._output))
+            #self.get_logger().info("exitflag " + str(self._exitflag))
             #self.get_logger().info("run time " + str(run_time))
             
             primary_goal = self._goal.primary_goal()
             angle_error = shift_angle_casadi(self._goal.primary_goal().angle() - self._q[2])
             self._remaining_distance = np.linalg.norm(self._q[:2] - primary_goal.position())
-            if self._remaining_distance <= primary_goal.epsilon() and angle_error<0.01:
+            if self._remaining_distance <= primary_goal.epsilon() and np.abs(angle_error)<0.01:
                 self._success = True
+                self.get_logger().info("Task completed successfully")
+                self.get_logger().info("Postion Error: " + str(self._remaining_distance))
+                self.get_logger().info("Orientation Error: " + str(angle_error))
             else:
                 self._success = False
 
@@ -392,9 +395,9 @@ class MPCPlannerNode(Node):
                 self.visualize()
             self.act()
             
-            self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
-            self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
-            self.get_logger().info("error angle" + str(rad2deg(angle_error)))
+            #self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
+            #self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
+            #self.get_logger().info("error angle" + str(rad2deg(angle_error)))
 
     def act(self):
         #self.get_logger().info("Control Mode: " + self._config['control_mode'])
@@ -429,7 +432,7 @@ class MPCPlannerNode(Node):
         
         self._cmd_pub.publish(cmd_msg)
         self._qdot = vel_action
-        self.get_logger().info("vel action" + str(vel_action))
+        #self.get_logger().info("vel action" + str(vel_action))
         
 
     if use_visualization:
