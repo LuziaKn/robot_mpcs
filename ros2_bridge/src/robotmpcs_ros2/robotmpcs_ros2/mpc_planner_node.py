@@ -473,8 +473,8 @@ class MPCPlannerNode(Node):
         vel_action_ego[:2] = np.dot(R, vel_action[:2])
         vel_action_ego[2] += 0.0
         cmd_msg = Twist()
-        cmd_msg.linear.x = 0.0#vel_action_ego[0]
-        cmd_msg.linear.y = 0.0#vel_action_ego[1]
+        cmd_msg.linear.x = vel_action_ego[0]
+        cmd_msg.linear.y = vel_action_ego[1]
         cmd_msg.angular.z = vel_action_ego[2]
         
         self._cmd_pub.publish(cmd_msg)
