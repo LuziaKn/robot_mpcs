@@ -17,8 +17,8 @@ mpc_planner_node:
          #- 'HeadingReaching'
         weights:
          w: 1.0
-         w_goal_angle: 0.2
-         w_heading =: 1.0
+         w_goal_angle: 1.0
+         w_heading: 1.0
          wvel: [0.0, 0.0, 0.0, 0.0, 0.00]
          ws: 1e10
          wu: 0.1

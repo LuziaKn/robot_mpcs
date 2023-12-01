@@ -104,11 +104,12 @@ class MpcModel(MpcBase):
         self._model.xinitidx = range(0, self._nx)
 
     def setCodeoptions(self, **kwargs):
-        solverName = self._modelName + "_n" + str(self._n) + "_" + str(self._dt).replace('.','') + "_H" + str(self._N)
+        solverName = "my_solver" #self._modelName + "_n" + str(self._n) + "_" + str(self._dt).replace('.','') + "_H" + str(self._N)
         if not self._config.slack:
             solverName += "_noSlack"
         if solverName in kwargs:
             solverName = kwargs.get('solverName')
+        solverName = "my_solver"
         self._solverName = solverName
         self._codeoptions = forcespro.CodeOptions(solverName)
         self._codeoptions.nlp.integrator.type = "ERK2"

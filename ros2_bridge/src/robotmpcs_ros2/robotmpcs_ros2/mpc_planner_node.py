@@ -19,6 +19,11 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from tf_transformations import euler_from_quaternion
 
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros import TransformBroadcaster
+from tf2_ros.transform_listener import TransformListener
+
 from robotmpcs.planner.mpcPlanner import MPCPlanner
 from robotmpcs.utils.utils import check_goal_reaching
 from mpscenes.goals.goal_composition import GoalComposition
@@ -56,7 +61,7 @@ class MPCPlannerNode(Node):
         
 
         # Load parameters from the 'my_node' namespace
-        self.declare_parameter('mpc.time_step', 0.05)
+        self.declare_parameter('mpc.time_step', 0.1)
         self.declare_parameter('mpc.model_name', 'pointRobot')
         self.declare_parameter('robot.end_link', 'ee_link')
         self.declare_parameter('package_path', 'default')
@@ -74,6 +79,11 @@ class MPCPlannerNode(Node):
         self._success = False
         
         self.establish_ros_connections()
+        
+        self.tf_buffer = Buffer()
+        self._listener = TransformListener(self.tf_buffer, self)
+        self.tf_init_timer = self.create_timer(5.0, self.tf_init)
+        
         self._dt = self.get_parameter('mpc.time_step').get_parameter_value().double_value
         self._rate = self.create_rate(1 / self._dt)
         self.get_logger().info(f'dt: {self._dt}')
@@ -89,7 +99,8 @@ class MPCPlannerNode(Node):
         self._exitflag = 1
         self.output = np.ones((self._planner._time_horizon,  self._planner._nx + self._planner._nu))
 
-
+    def tf_init(self):
+        self.tf_init_timer.cancel()
 
     def ros_solver_function(self,problem):
         
@@ -144,15 +155,15 @@ class MPCPlannerNode(Node):
         #     [-6, 6],
         # ])
         self._limits_u = np.array([
-            [-1, 1],
-            [-1, 1],
-            [-5, 5],
+            [-2, 2],
+            [-2, 2],
+            [-3, 3],
         ])
         
         self._limits_vel = np.array([
-            [-0.8, 0.8],
-            [-0.8, 0.8],
             [-1, 1],
+            [-1, 1],
+            [-3, 3],
         ])
     
     if use_visualization:
@@ -177,9 +188,9 @@ class MPCPlannerNode(Node):
             
 
     def init_arrays(self):
-        self._action = np.zeros(2)
+        self._action = np.zeros(3)
         self._q = np.zeros(3)
-        self._qudot = np.zeros(2)
+        self._qudot = np.zeros(3)
         self._qdot = np.zeros(3)
 
     def init_planner(self):
@@ -274,7 +285,7 @@ class MPCPlannerNode(Node):
                 
         self._cmd_pub = self.create_publisher(Twist, "/luzia_Alienware_m15_R4/platform/command_limiter_node/base/cmd_vel_in_navigation", 1)
         #self._odom_sub = self.create_subscription(Odometry, "/luzia_Alienware_m15_R4/platform/odometry", self._odom_cb, 1)
-        self._nmcl_sub = self.create_subscription(PoseWithCovarianceStamped, "/NMCLPose", self._nmcl_cb, 1)
+        #self._nmcl_sub = self.create_subscription(PoseWithCovarianceStamped, "/NMCLPose", self._nmcl_cb, 1)
         #self._goal_sub = self.create_subscription(PoseStamped, "/goal_pose", self._goal_cb, 1)
 
     def listener_callback(self, msg):
@@ -320,6 +331,7 @@ class MPCPlannerNode(Node):
         
         
     def execute_callback(self, goal_handle):
+
         self.get_logger().info('Received goal request')
 
         goal_pose = goal_handle.request.pose
@@ -351,9 +363,9 @@ class MPCPlannerNode(Node):
         #     time.sleep(1)
 
   
-
-
         goal_handle.succeed()
+
+        
     
         # within_goal_tolerance = check_goal_reaching(self._q[:2], self._goal)
         # while not within_goal_tolerance:
@@ -373,10 +385,35 @@ class MPCPlannerNode(Node):
             
             #self.get_logger().info(f'Curent state: {self._q}')
             
-            # self._qdot = np.array([
-            # self.output[1,3],
-            # self.output[1,4],
-            # self.output[1,5]])
+
+
+            try:
+                map_to_base = self.tf_buffer.lookup_transform(
+                    self._hostname + "_map",
+                    self._hostname + "_base_link",
+                    rclpy.time.Time())
+            except TransformException as ex:
+                self.get_logger().warn(f'Could not get transform: {ex}')
+            
+            orientation_list = [
+                map_to_base.transform.rotation.x,
+                map_to_base.transform.rotation.y,
+                map_to_base.transform.rotation.z,
+                map_to_base.transform.rotation.w
+            ]
+            _, _, yaw = euler_from_quaternion(orientation_list)
+            
+            
+            self._q = np.array([
+                map_to_base.transform.translation.x,
+                map_to_base.transform.translation.y,
+                yaw,
+            ])
+            
+            self._qdot = np.array([0.0,
+                                0.0,
+                                0.0])
+
 
 
             start_time = time.time()
@@ -394,31 +431,29 @@ class MPCPlannerNode(Node):
             primary_goal = self._goal.primary_goal()
             angle_error = shift_angle_casadi(self._goal.primary_goal().angle() - self._q[2])
             self._remaining_distance = np.linalg.norm(self._q[:2] - primary_goal.position())
-            if self._remaining_distance <= primary_goal.epsilon() and np.abs(angle_error)<0.01:
+            if self._remaining_distance <= primary_goal.epsilon() and np.abs(angle_error)<0.1:
                 self._success = True
                 self.get_logger().info("Task completed successfully")
                 self.get_logger().info("Postion Error: " + str(self._remaining_distance))
                 self.get_logger().info("Orientation Error: " + str(angle_error))
-            else:
-                self._success = False
+                
+
 
             if use_visualization:
                 self.visualize()
+            #if self._success == False:
             self.act()
             heading = np.arctan2(self._q[1],self._q[0])
             self.get_logger().info("heading. robot " + str(rad2deg(heading)))
             self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
             self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
             self.get_logger().info("error angle" + str(rad2deg(angle_error)))
+        
 
     def act(self):
-        #self.get_logger().info("Control Mode: " + self._config['control_mode'])
+        self.get_logger().info("Control Mode: " + self._config['control_mode'])
         if self._config['control_mode'] == 'acc':
             vel_action = self._action * self._dt + self._qudot
-            # limit to account for model errors
-            #vel_action[0] = np.clip(vel_action[0], 0.9*self._limits_vel[0][0], 0.9*self._limits_vel[0][1])
-            #vel_action[1] = np.clip(vel_action[1], 0.9*self._limits_vel[1][0], 0.9*self._limits_vel[1][1])
-            #vel_action[2] = np.clip(vel_action[2], 0.9*self._limits_vel[2][0], 0.9*self._limits_vel[2][1])
         elif self._config['control_mode'] == 'vel':
             self.get_logger().info("actuate")
             vel_action = self._action
@@ -438,13 +473,15 @@ class MPCPlannerNode(Node):
         vel_action_ego[:2] = np.dot(R, vel_action[:2])
         vel_action_ego[2] += 0.0
         cmd_msg = Twist()
-        cmd_msg.linear.x = vel_action_ego[0]
-        cmd_msg.linear.y = vel_action_ego[1]
+        cmd_msg.linear.x = 0.0#vel_action_ego[0]
+        cmd_msg.linear.y = 0.0#vel_action_ego[1]
         cmd_msg.angular.z = vel_action_ego[2]
         
         self._cmd_pub.publish(cmd_msg)
-        self._qdot = vel_action
-        #self.get_logger().info("vel action" + str(vel_action))
+        self._qudot = vel_action
+        
+        self.get_logger().info("Vel action: " + str(vel_action_ego))
+        
         
 
     if use_visualization:

@@ -5,7 +5,7 @@ import os
 import sys
 #import forcespro
 from robotmpcs.models.mpcBase import MpcConfiguration
-from robotmpcs.planner.sensor_conversion.free_space_decomposition import FreeSpaceDecomposition
+#from robotmpcs.planner.sensor_conversion.free_space_decomposition import FreeSpaceDecomposition
 
 
 class SolverDoesNotExistError(Exception):
@@ -73,6 +73,9 @@ class MPCPlanner(object):
         print(self._solverFile)
         if not self._config.slack:
             self._solverFile += "_noSlack"
+            
+        self._solverFile = (#specify solver name correctly
+            solversDir + "my_solver")
         if not os.path.isdir(self._solverFile):
                 raise(SolverDoesNotExistError(self._solverFile))
         with open(self._solverFile + "/paramMap.yaml", "r") as stream:
@@ -102,11 +105,11 @@ class MPCPlanner(object):
         if self._debug:
             self._mpc_model = mpc_model
 
-        self._fsd = FreeSpaceDecomposition(
-            np.array([0.0, 0.0, 0.0]),
-            max_radius=10,
-            number_constraints=1,
-        )
+        # self._fsd = FreeSpaceDecomposition(
+        #     np.array([0.0, 0.0, 0.0]),
+        #     max_radius=10,
+        #     number_constraints=1,
+        # )
 
 
 
