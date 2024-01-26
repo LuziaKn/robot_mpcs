@@ -11,7 +11,7 @@ class GoalReaching(MpcBase):
         self._paramMap = ParamMap
         self._npar = npar
 
-        self.addEntry2ParamMap("goal", self._m)
+        self.addEntry2ParamMap("goal_position", self._m)
         self.addEntry2ParamMap("wgoal", self._m)
         return self._paramMap, self._npar
 
@@ -25,7 +25,7 @@ class GoalReaching(MpcBase):
             self._robot_config.end_link,
             positionOnly=True
         )
-        goal = p[self._paramMap["goal"]]
+        goal = p[self._paramMap["goal_position"]]
         w = p[self._paramMap["wgoal"]]
         W = diagSX(w, self._m)
         err = pos_ee - goal

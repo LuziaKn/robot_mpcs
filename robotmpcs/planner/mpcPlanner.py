@@ -201,7 +201,7 @@ class MPCPlanner(object):
                     position = 0
                 else:
                     position = goal.primary_goal().position()[j]
-                self._params[self._npar * i + self._paramMap["goal"][j]] = position
+                self._params[self._npar * i + self._paramMap["goal_position"][j]] = position
 
     def setConstraintAvoidance(self):
         for i in range(self._config.time_horizon):

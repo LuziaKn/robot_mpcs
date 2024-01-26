@@ -81,7 +81,7 @@ class PointRobotMpcExample(MpcExample):
         for i in range(n_steps):
             q = ob["robot_0"]['joint_state']['position']
             qdot = ob["robot_0"]['joint_state']['velocity']
-            action, output = self._planner.computeAction(q, qdot)
+            action, output, exitflag = self._planner.computeAction(q, qdot)
             plan = []
             for key in output:
                 plan.append(np.concatenate([output[key][:2],np.zeros(1)]))
