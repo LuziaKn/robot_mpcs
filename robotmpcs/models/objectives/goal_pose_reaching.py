@@ -39,6 +39,7 @@ class GoalPoseReaching(MpcBase):
         err = transf_ee[0:2,3] - goal_position[:2]
         dist = ca.fmax(ca.sqrt(err[0]**2 + err[1]**2),0.01)
         err_normalized = err/dist
+        err = ca.fmin(err, 4.0)
 
         err_angle = shift_angle_casadi(goal_angle - q[2])
         

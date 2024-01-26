@@ -50,7 +50,7 @@ class MPCPlannerNode(Node):
 
     def __init__(self):
         super().__init__("mpc_planner_node")
-        self.get_logger().info('MPC Planner Node is running.')
+        #self.get_logger().info('MPC Planner Node is running.')
         
     
         self.cli = self.create_client(CallForcesPro, 'call_forces_pro') # Creates the client in ROS2
@@ -61,7 +61,7 @@ class MPCPlannerNode(Node):
         
 
         # Load parameters from the 'my_node' namespace
-        self.declare_parameter('mpc.time_step', 0.1)
+        self.declare_parameter('mpc.time_step', 0.05)
         self.declare_parameter('mpc.model_name', 'pointRobot')
         self.declare_parameter('robot.end_link', 'ee_link')
         self.declare_parameter('package_path', 'default')
@@ -411,13 +411,13 @@ class MPCPlannerNode(Node):
             ])
             
             self._qdot = np.array([0.0,
-                                0.0,
-                                0.0])
+                                 0.0,
+                                 0.0])
 
 
 
             start_time = time.time()
-            self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)            
+            self._action, self._output, self._exitflag = self._planner.computeAction(self._q, self._qdot)            
             end_time = time.time()
             run_time = end_time - start_time
 
@@ -444,10 +444,10 @@ class MPCPlannerNode(Node):
             #if self._success == False:
             self.act()
             heading = np.arctan2(self._q[1],self._q[0])
-            self.get_logger().info("heading. robot " + str(rad2deg(heading)))
-            self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
-            self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
-            self.get_logger().info("error angle" + str(rad2deg(angle_error)))
+            #self.get_logger().info("heading. robot " + str(rad2deg(heading)))
+            #self.get_logger().info("orient. robot " + str(rad2deg(self._q[2])))
+            #self.get_logger().info("orient. goal " + str(rad2deg(self._goal.primary_goal().angle())))
+            #self.get_logger().info("error angle" + str(rad2deg(angle_error)))
         
 
     def act(self):
@@ -457,6 +457,7 @@ class MPCPlannerNode(Node):
         elif self._config['control_mode'] == 'vel':
             self.get_logger().info("actuate")
             vel_action = self._action
+            acc = self._output[0,-self._planner._nu:]
         if self._exitflag > 0:
             self.get_logger().info("feasible")
         elif self._exitflag == 0:
@@ -477,8 +478,13 @@ class MPCPlannerNode(Node):
         cmd_msg.linear.y = vel_action_ego[1]
         cmd_msg.angular.z = vel_action_ego[2]
         
+        self.get_logger().info("Vel action x: " + str(cmd_msg.linear.x))
+        self.get_logger().info("Vel action y: " + str(cmd_msg.linear.y))
+        self.get_logger().info("Vel action angle: " + str(cmd_msg.angular.z))
+        
         self._cmd_pub.publish(cmd_msg)
-        self._qudot = vel_action
+        #self._qudot = acc
+        self._qdot = vel_action
         
         self.get_logger().info("Vel action: " + str(vel_action_ego))
         

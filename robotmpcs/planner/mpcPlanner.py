@@ -230,7 +230,7 @@ class MPCPlanner(object):
 
     def setVelLimits(self, limits_vel):
         for i in range(self._config.time_horizon):
-            for j in range(2): # todo make dependent on vel dim
+            for j in range(3): # todo make dependent on vel dim
                 self._params[
                     self._npar * i + self._paramMap["lower_limits_vel"][j]
                 ] = limits_vel[0][j]

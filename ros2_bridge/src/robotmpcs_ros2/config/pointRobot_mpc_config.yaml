@@ -5,7 +5,7 @@ mpc_planner_node:
         model_name: pointRobot
         n: 3
         time_horizon: 10
-        time_step: 0.1
+        time_step: 0.05
         slack: False
         interval: 1
         initialization: "current_state"
@@ -17,7 +17,7 @@ mpc_planner_node:
          #- 'HeadingReaching'
         weights:
          w: 1.0
-         w_goal_angle: 1.0
+         w_goal_angle: 0.5
          w_heading: 1.0
          wvel: [0.0, 0.0, 0.0, 0.0, 0.00]
          ws: 1e10
