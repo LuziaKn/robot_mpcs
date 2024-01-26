@@ -4,7 +4,7 @@ import numpy as np
 from std_msgs.msg import Float64MultiArray
 import rospkg
 import rospy
-from geometry_msgs.msg import Pose, Twist
+from geometry_msgs.msg import Pose, Twist, PoseStamped
 from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
 from robotmpcs.planner.mpcPlanner import MPCPlanner
@@ -30,8 +30,11 @@ class MPCNode():
 
     def __init__(self):
         rospy.init_node("mpc_node")
-        self.establish_ros_connections()
         self._dt = rospy.get_param('/mpc/time_step')
+        self.vel_topic = rospy.get_param('/ros/vel_topic')
+        self.pose_topic = rospy.get_param('/ros/pose_topic')
+        self.goal_topic = rospy.get_param('/ros/goal_topic')
+        self.establish_ros_connections()
         self._rate = rospy.Rate(1/self._dt)
         self.init_scenario()
         self.init_planner()
@@ -53,15 +56,16 @@ class MPCNode():
                 [-10, 10],
         ])
         self._limits_u = np.array([
-                [-10, 10],
-                [-10, 10],
+                [-0.2, 0.2],
+                [-0.2, 0.2],
+                [-2, 2]
         ])
 
 
     def init_arrays(self):
-        self._action = np.zeros(2)
+        self._action = np.zeros(3)
         self._q = np.zeros(3)
-        self._qudot = np.zeros(2)
+        self._qudot = np.zeros(3)
         self._qdot = np.zeros(3)
 
     def init_planner(self):
@@ -77,7 +81,7 @@ class MPCNode():
         self._planner.reset()
 
     def set_mpc_parameter(self):
-        self._planner.setObstacles(self._obstacles, self._r_body)
+        self._planner.setRadialConstraints(self._obstacles, self._r_body)
         if hasattr(self, '_limits'):#todo also check if they were included in solver
             self._planner.setJointLimits(np.transpose(self._limits))
         if hasattr(self, '_limits_vel'):
@@ -87,17 +91,17 @@ class MPCNode():
 
     def establish_ros_connections(self):
         self._cmd_pub = rospy.Publisher(
-            "/boxer_velocity_controller/cmd_vel", Twist, queue_size=1
+            self.vel_topic, Twist, queue_size=1
         )
         self._odom_sub = rospy.Subscriber(
-            "/odometry/filtered", Odometry, self._odom_cb
+            self.pose_topic, Odometry, self._odom_cb
         )
         self._goal_sub = rospy.Subscriber(
-            "/mpc/goal", Float64MultiArray, self._goal_cb
+            self.goal_topic, PoseStamped, self._goal_cb
         )
 
     def _goal_cb(self, goal_msg: Float64MultiArray):
-        goal_position = goal_msg.data
+        goal_position = [goal_msg.pose.position.x, goal_msg.pose.position.y]
         if len(goal_position) != 2:
             rospy.logwarn("Goal ignored because of dimension missmatch")
         goal_dict = {
@@ -113,7 +117,7 @@ class MPCNode():
             }
         }
         self._goal = GoalComposition(name="goal1", content_dict=goal_dict)
-        self._planner.setGoal(self._goal)
+        self._planner.setGoalReaching(self._goal)
 
 
     def _odom_cb(self, odom_msg: Odometry):
@@ -139,7 +143,7 @@ class MPCNode():
     def run(self):
         while not rospy.is_shutdown():
             if self._goal:
-                self._action, _ = self._planner.computeAction(self._q, self._qdot, self._qudot)
+                self._action, _, exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
             #self._action = np.array([1.0, 0.2])
             rospy.loginfo(self._action)
             self.act()

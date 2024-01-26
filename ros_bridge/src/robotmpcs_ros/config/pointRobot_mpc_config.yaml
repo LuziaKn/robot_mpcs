@@ -2,18 +2,18 @@ type: mpc
 mpc:
   model_name: pointRobot
   n: 3
-  time_horizon: 20
-  time_step: 0.05
+  time_horizon: 10
+  time_step: 0.1
   slack: False
   interval: 1
-  initialization: "current_state"
+  initialization: previous_plan
   constraints:
-    - 'RadialConstraints'
-    - 'SelfCollisionAvoidanceConstraints'
-    - 'JointLimitConstraints'
-    - 'InputLimitConstraints'
+    - RadialConstraints
+    - SelfCollisionAvoidanceConstraints
+    - JointLimitConstraints
+    - InputLimitConstraints
   objectives:
-    - 'GoalReaching'
+    - GoalReaching
   weights:
     w: 1.0
     wvel: [1.0, 1.0, 1.0]
@@ -34,3 +34,7 @@ robot:
   base_type: holonomic
 example:
   debug: False
+ros:
+  vel_topic: "/ccc"
+  pose_topic: "/robot_ekf/odometry"
+  goal_topic: "/move_base_simple/goal"

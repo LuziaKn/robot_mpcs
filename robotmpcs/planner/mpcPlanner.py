@@ -40,6 +40,7 @@ class MPCPlanner(object):
         )
         """
         self._debug = debug
+        self.dt = self._config.time_step
         dt_str = str(self._config.time_step).replace(".", "")
         self._solverFile = (
             solversDir
@@ -155,7 +156,7 @@ class MPCPlanner(object):
             for i in range(self._config.time_horizon):
                 for m_i in range(self.m()):
                     paramsIndexObstX = self._npar * i + self._paramMap['obst'][j * (self.m() + 1) + m_i]
-                    predictedPosition = obstPos[m_i] + obstVel[m_i] * self.dt() * i + 0.5 * (self.dt() * i)**2 * obstAcc[m_i]
+                    predictedPosition = obstPos[m_i] + obstVel[m_i] * self.dt * i + 0.5 * (self.dt * i)**2 * obstAcc[m_i]
                     self._params[paramsIndexObstX] = predictedPosition
                 paramsIndexObstR = self._npar * i + self._paramMap['obst'][j * (self.m() + 1) + self.m()]
                 self._params[paramsIndexObstR] = self._r
@@ -298,5 +299,7 @@ class MPCPlanner(object):
             self._actionCounter = 1
         else:
             self._actionCounter += 1
+
+        print('action: ', self._action)
         return self._action, output, exitflag
 

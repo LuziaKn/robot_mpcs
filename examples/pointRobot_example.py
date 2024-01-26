@@ -30,9 +30,9 @@ class PointRobotMpcExample(MpcExample):
         )
         self._r_body = 0.3
         self._limits = np.array([
-                [-10, 10],
-                [-10, 10],
-                [-10, 10],
+                [-100, 100],
+                [-100, 100],
+                [-100, 100],
         ])
         self._limits_u = np.array([
                 [-1, 1],

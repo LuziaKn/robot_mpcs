@@ -1,6 +1,6 @@
 type: mpc
 mpc:
-  model_name: dingo-o
+  model_name: pointRobot
   n: 3
   time_horizon: 10
   time_step: 0.1
@@ -25,12 +25,12 @@ mpc:
   control_mode: "acc"
 robot:
   collision_links: 
-    - chassis_link
+    - ee_link
   selfCollision:
     pairs:  []
-  urdf_file: boxer_fk.urdf
-  root_link: base_link
-  end_link: chassis_link
-  base_type: diffdrive
+  urdf_file: pointRobot.urdf
+  root_link: ee_link
+  end_link: base_link
+  base_type: holonomic
 example:
   debug: False

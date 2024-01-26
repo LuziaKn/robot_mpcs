@@ -22,7 +22,7 @@ class MpcModel(MpcBase):
         if initParamMap:
             self._limits = {
                 "x": {"low": np.ones(self._nx) * -100, "high": np.ones(self._nx) * 100},
-                "u": {"low": np.ones(self._nu) * -100, "high": np.ones(self._nu) * 100},
+                "u": {"low": np.ones(self._nu) * -1, "high": np.ones(self._nu) * 1},
                 "s": {"low": np.zeros(1), "high": np.ones(1) * np.inf},
             }
             self.initParamMap()
