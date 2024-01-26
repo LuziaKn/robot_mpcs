@@ -21,6 +21,7 @@ envMap = {
     'pointRobot': 'point-robot-acc-v0',
     'boxer': 'boxer-robot-acc-v0',
     'panda': 'panda-reacher-acc-v0',
+    'dingo': 'dingo-robot-acc-v0',
 }
 
 class MpcExample(object):
