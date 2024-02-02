@@ -4,12 +4,13 @@ import numpy as np
 from std_msgs.msg import Float64MultiArray
 import rospkg
 import rospy
-from geometry_msgs.msg import Pose, Twist, PoseStamped
+from geometry_msgs.msg import Pose, Twist, PoseStamped, Point
 from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
 from robotmpcs.planner.mpcPlanner import MPCPlanner
 from mpscenes.goals.goal_composition import GoalComposition
 from mpscenes.obstacles.sphere_obstacle import SphereObstacle
+from ros_visuals import ROSMarkerPublisher
 
 def get_rotation(pose: Pose) -> float:
     orientation_q = pose.orientation
@@ -56,9 +57,15 @@ class MPCNode():
                 [-10, 10],
         ])
         self._limits_u = np.array([
+                [-0.5, 0.5],
+                [-0.5, 0.5],
+                [-0.2, 0.2]
+        ])
+
+        self._limits_vel = np.array([
                 [-0.2, 0.2],
                 [-0.2, 0.2],
-                [-2, 2]
+                [-0.2, 0.2]
         ])
 
 
@@ -79,6 +86,27 @@ class MPCNode():
             **self._config)
         self._planner.concretize()
         self._planner.reset()
+        self.init_visuals()
+
+
+    def init_visuals(self):
+        self._frame_id = 'map'
+        self.marker_publisher = ROSMarkerPublisher("ros_tools/mpc/visuals", 15)
+
+        self._visuals_goal = self.marker_publisher.get_circle(self._frame_id)
+        self._visuals_goal.set_color(4, 1.0)
+        self._visuals_goal.set_scale(0.5, 0.5, 0.01)
+        self._visuals_goal.add_marker(Point(x=10.0, y=0.0, z=2.0))
+
+        self._visuals_goal_angle = self.marker_publisher.get_line(self._frame_id)
+        self._visuals_goal_angle.set_color(4, 1.0)
+        self._visuals_goal_angle.set_scale(0.1)
+        self._visuals_goal_angle.add_line(Point(x=10.0, y=0.0, z=2.0), Point(x=11.0, y=0.0, z=2.0))
+
+        self._visuals_plan_circle = self.marker_publisher.get_circle(self._frame_id)
+        self._visuals_plan_circle.set_color(7, 0.5)
+        self._visuals_plan_circle.set_scale(0.5, 0.5, 0.01)
+        self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
 
     def set_mpc_parameter(self):
         self._planner.setRadialConstraints(self._obstacles, self._r_body)
@@ -86,6 +114,7 @@ class MPCNode():
             self._planner.setJointLimits(np.transpose(self._limits))
         if hasattr(self, '_limits_vel'):
             self._planner.setVelLimits(np.transpose(self._limits_vel))
+            print("set_vel_limits")
         if hasattr(self, '_limits_u'):
             self._planner.setInputLimits(np.transpose(self._limits_u))
 
@@ -100,6 +129,7 @@ class MPCNode():
             self.goal_topic, PoseStamped, self._goal_cb
         )
 
+
     def _goal_cb(self, goal_msg: Float64MultiArray):
         goal_position = [goal_msg.pose.position.x, goal_msg.pose.position.y]
         if len(goal_position) != 2:
@@ -112,6 +142,7 @@ class MPCNode():
                 "parent_link": 'origin',
                 "child_link": rospy.get_param('/robot/end_link'),
                 "desired_position": goal_position,
+                "angle": [0,0,0,1],
                 "epsilon": 0.4,
                 "type": "staticSubGoal"
             }
@@ -133,20 +164,28 @@ class MPCNode():
         ])
 
     def act(self):
-        vel_action = self._action * self._dt + self._qudot
+        vel_action = self._action
         cmd_msg = Twist()
         cmd_msg.linear.x = vel_action[0]
-        cmd_msg.angular.z = vel_action[1]
+        cmd_msg.linear.y = vel_action[1]
         self._cmd_pub.publish(cmd_msg)
         self._qudot = vel_action
 
     def run(self):
         while not rospy.is_shutdown():
             if self._goal:
-                self._action, _, exitflag = self._planner.computeAction(self._q, self._qdot, self._qudot)
-            #self._action = np.array([1.0, 0.2])
-            rospy.loginfo(self._action)
+                print(self._q)
+                self._action, output, exitflag, vel_limit = self._planner.computeAction(self._q, self._qdot)
+                for i in range(output.shape[0]):
+                    position = Point(x=output[i,0], y=output[i,1], z=0.1)
+                    self._visuals_plan_circle.add_marker(position)
+
+
+                #rospy.loginfo(self._action)
+                if self._action[0]>vel_limit:
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
             self.act()
+            self.marker_publisher.publish()
             self._rate.sleep()
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import yaml
 import os
 import forcespro
 from robotmpcs.models.mpcBase import MpcConfiguration
+from scipy.spatial.transform import Rotation as R
 
 
 
@@ -111,8 +112,11 @@ class MPCPlanner(object):
         self._params = np.zeros(shape=(self._npar * self._config.time_horizon), dtype=float)
         for i in range(self._config.time_horizon):
             self._params[
-                [self._npar * i + val for val in self._paramMap["wgoal"]]
-            ] = self._config.weights["w"]
+                [self._npar * i + val for val in self._paramMap["wgoal_position"]]
+            ] = self._config.weights["wgoal_position"]
+            self._params[
+                [self._npar * i + val for val in self._paramMap["wgoal_orientation"]]
+            ] = self._config.weights["wgoal_orientation"]
             # for j, val in enumerate(self._paramMap["wvel"]):
             #     self._params[[self._npar * i + val]] = self._config.weights["wvel"][j]
             self._params[
@@ -196,13 +200,16 @@ class MPCPlanner(object):
 
     def setVelLimits(self, limits_vel):
         for i in range(self._config.time_horizon):
-            for j in range(self._nx-self._n): # todo make dependent on vel dim
+            for j in range(self._nx-self._n):
                 self._params[
                     self._npar * i + self._paramMap["lower_limits_vel"][j]
                 ] = limits_vel[0][j]
                 self._params[
                     self._npar * i + self._paramMap["upper_limits_vel"][j]
                 ] = limits_vel[1][j]
+                self.vel_limit = self._params[
+                    self._npar * i + self._paramMap["upper_limits_vel"][j]
+                ]
 
     def setInputLimits(self, limits_u):
         for i in range(self._config.time_horizon):
@@ -221,7 +228,10 @@ class MPCPlanner(object):
                     position = 0
                 else:
                     position = goal.primary_goal().position()[j]
+                rot = R.from_quat(goal.primary_goal().angle())
+                rot_euler = rot.as_euler('xyz', degrees=False)
                 self._params[self._npar * i + self._paramMap["goal_position"][j]] = position
+                self._params[self._npar * i + self._paramMap["goal_orientation"][j]] = rot_euler[j]
 
     def setConstraintAvoidance(self):
         for i in range(self._config.time_horizon):
@@ -233,17 +243,11 @@ class MPCPlanner(object):
         pass
 
     def shiftHorizon(self, output):
-        for key in output.keys():
-            if self._config.time_horizon < 10:
-                stage = int(key[-1:])
-            elif self._config.time_horizon >= 10 and self._config.time_horizon < 100:
-                stage = int(key[-2:])
-            elif self._config.time_horizon >= 100:
-                stage = int(key[-3:])
+        for stage in range(output.shape[0]):
             if stage == 1:
                 continue
-            self._x0[stage - 2, 0 : len(output[key])] = output[key]
-            self._x0[-1:, 0 : len(output[key])] = output[key]
+            self._x0[stage - 2, :] = output[stage,:]
+            self._x0[-1:, :] = output[stage,:]
 
     def setX0(self, initialize_type="current_state", initial_step= True):
         if initialize_type == "current_state" or initialize_type == "previous_plan" and initial_step:
@@ -285,7 +289,7 @@ class MPCPlanner(object):
             print(exitflag)
         # If in velocity mode, the action should be velocities instead of accelerations
         if self._config.control_mode == 'vel':
-            action = np.array([self.output[1,3],self.output[1,4],0.0])
+            action = self.output[1,self._n: self._nx]
         elif self._config.control_mode == 'acc':
             action = np.array(self.output[0, self._nx: self._nx+ self._nu])
 
@@ -310,5 +314,5 @@ class MPCPlanner(object):
             self._actionCounter += 1
 
         print('action: ', self._action)
-        return self._action, output, exitflag
+        return self._action, output, exitflag, self.vel_limit
 

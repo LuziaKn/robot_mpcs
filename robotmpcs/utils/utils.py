@@ -55,3 +55,10 @@ def parse_setup(setup_file: str):
     with open(setup_file, "r") as setup_stream:
         setup = yaml.safe_load(setup_stream)
     return setup
+
+def orientation_matrix_to_euler(orientation_matrix):
+    phi = ca.atan2(orientation_matrix[2, 1], orientation_matrix[2, 2])
+    theta = ca.atan2(-orientation_matrix[2, 0], ca.sqrt(orientation_matrix[2, 1]**2 + orientation_matrix[2, 2]**2))
+    psi = ca.atan2(orientation_matrix[1, 0], orientation_matrix[0, 0])
+
+    return phi, theta, psi

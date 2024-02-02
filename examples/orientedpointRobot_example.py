@@ -9,7 +9,7 @@ from mpscenes.goals.goal_composition import GoalComposition
 from mpc_example import MpcExample
 from robotmpcs.planner.visualizer import Visualizer
 
-class PointRobotMpcExample(MpcExample):
+class OrientedPointRobotMpcExample(MpcExample):
 
     def initialize_environment(self):
         self._visualizer = Visualizer()
@@ -32,18 +32,18 @@ class PointRobotMpcExample(MpcExample):
         self._limits = np.array([
                 [-100, 100],
                 [-100, 100],
-                [-100, 100],
+                [-2*np.pi, 2*np.pi],
         ])
         self._limits_u = np.array([
                 [-1, 1],
                 [-1, 1],
-                [-15, 15],
+                [-2, 2],
         ])
 
         self._limits_vel = np.array([
                 [-1, 1],
                 [-1, 1],
-                [-15, 15],
+                [-2, 2],
         ])
         # Definition of the obstacle.
         static_obst_dict = {
@@ -76,11 +76,13 @@ class PointRobotMpcExample(MpcExample):
             self._env.add_obstacle(obstacle)
         self._env.set_spaces()
 
-        # add visualization of plan
+        # visualization plan
         for i in range(self._config['mpc']['time_horizon']):
             self._env.add_visualization(size=[self._r_body, 0.1])
 
-        # add visualization of goal orientation
+        # visualization goal orientation
+        #self._env.add_visualization(shape_type = 'cylinder', size=[2.0, 0.1])
+
 
 
         return {}
@@ -100,7 +102,7 @@ class PointRobotMpcExample(MpcExample):
             self._env.update_visualizations(plan)
 
 def main():
-    point_robot_example = PointRobotMpcExample(sys.argv[1])
+    point_robot_example = OrientedPointRobotMpcExample(sys.argv[1])
     point_robot_example.initialize_environment()
     point_robot_example.set_mpc_parameter()
     point_robot_example.run()

@@ -1,19 +1,20 @@
 type: mpc
 mpc:
-  model_name: pointRobot
+  model_name: orientedpointRobot
   n: 3
-  time_horizon: 10
-  time_step: 0.1
+  time_horizon: 20
+  time_step: 0.05
   slack: False
   interval: 1
-  initialization: current_state
+  initialization: "current_state"
   constraints:
-    - SelfCollisionAvoidanceConstraints
-    - JointLimitConstraints
-    - InputLimitConstraints
-    - VelLimitConstraints
+    - 'RadialConstraints'
+    - 'SelfCollisionAvoidanceConstraints'
+    - 'JointLimitConstraints'
+    - 'InputLimitConstraints'
+    - 'VelLimitConstraints'
   objectives:
-    - GoalReaching
+    - 'GoalReaching'
   weights:
     wgoal_position: 1.0
     wgoal_orientation: 1.0
@@ -22,20 +23,17 @@ mpc:
     wu: 0.1
     wobst: 0.05
     wconstr: [0.5, 0.0, 0.0, 0.0]
-  number_obstacles: 0
+  number_obstacles: 1
   control_mode: "vel"
 robot:
   collision_links: 
     - base_link
   selfCollision:
     pairs:  []
-  urdf_file: pointRobot.urdf
+  urdf_file: orientedpointRobot.urdf
   root_link: ee_link
   end_link: base_link
   base_type: holonomic
+  consider_orientation: False
 example:
   debug: False
-ros:
-  vel_topic: "/ccc"
-  pose_topic: "/robot_ekf/odometry"
-  goal_topic: "/move_base_simple/goal"

@@ -19,6 +19,7 @@ envMap = {
     'planarArm': 'nLink-reacher-acc-v0', 
     'diffDrive': 'ground-robot-acc-v0', 
     'pointRobot': 'point-robot-acc-v0',
+    'orientedpointRobot': 'orientedpoint-robot-acc-v0',
     'boxer': 'boxer-robot-acc-v0',
     'panda': 'panda-reacher-acc-v0',
     'dingo': 'dingo-robot-acc-v0',

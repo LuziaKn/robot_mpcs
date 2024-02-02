@@ -16,7 +16,8 @@ mpc:
   objectives:
     - 'GoalReaching'
   weights:
-    w: 1.0
+    wgoal_position: 1.0
+    wgoal_orientation: 1.0
     wvel: [1.0, 1.0, 1.0]
     ws: 1e10
     wu: 0.1
