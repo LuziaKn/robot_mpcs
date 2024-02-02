@@ -25,6 +25,20 @@ class EmptyObstacle():
     def dim(self):
         return 3
 
+def output2array(output):
+    i = 0
+    N = len(output)
+    num_str = str(N)
+
+    dec= len(num_str)
+
+    #dec = int(N//10+1)
+    output_array = np.zeros((N,len(output["x{:0{}d}".format(1, dec)])))
+    for key in output.keys():
+        output_array[i,:] = output[key]
+        i +=1
+
+    return output_array
 class PlannerSettingIncomplete(Exception):
     pass
 
@@ -69,6 +83,7 @@ class MPCPlanner(object):
         self._nu = self._properties['nu']
         self._ns = self._properties['ns']
         self._npar = self._properties['npar']
+        self._n = self._properties['n']
         try:
             print("Loading solver %s" % self._solverFile)
             self._solver = forcespro.nlp.Solver.from_directory(self._solverFile)
@@ -78,6 +93,10 @@ class MPCPlanner(object):
 
         if self._debug:
             self._mpc_model = mpc_model
+
+        print(self._paramMap)
+
+
 
 
 
@@ -177,7 +196,7 @@ class MPCPlanner(object):
 
     def setVelLimits(self, limits_vel):
         for i in range(self._config.time_horizon):
-            for j in range(2): # todo make dependent on vel dim
+            for j in range(self._nx-self._n): # todo make dependent on vel dim
                 self._params[
                     self._npar * i + self._paramMap["lower_limits_vel"][j]
                 ] = limits_vel[0][j]
@@ -261,27 +280,17 @@ class MPCPlanner(object):
             print("Inequalities: {}".format(ineq))
 
         self.output, exitflag, info = self._solver.solve(problem)
+        self.output = output2array(self.output)
         if exitflag < 0:
             print(exitflag)
-        if self._config.time_horizon < 10:
-            key0 = 'x1'
-            key1 = 'x2'
-        elif self._config.time_horizon >= 10 and self._config.time_horizon < 100:
-            key0 = 'x01'
-            key1 = 'x02'
-        elif self._config.time_horizon >= 100:
-            key0 = 'x001'
-            key1 = 'x002'
         # If in velocity mode, the action should be velocities instead of accelerations
-        if self._config.control_mode == "vel":
-            action = self.output[key1][-self._nu-self._nu: -self._nu]
-        elif self._config.control_mode == "acc":
-            action = self.output[key0][-self._nu:]
-        else:
-            print("No valid control mode specified!")
-            action = np.zeros((self._nu))
+        if self._config.control_mode == 'vel':
+            action = np.array([self.output[1,3],self.output[1,4],0.0])
+        elif self._config.control_mode == 'acc':
+            action = np.array(self.output[0, self._nx: self._nx+ self._nu])
+
         if self._config.slack:
-            self._slack = self.output[key0][self._nx]
+            self._slack = self.output[0,self._nx]
             if self._slack > 1e-3:
                 print("slack : ", self._slack)
 

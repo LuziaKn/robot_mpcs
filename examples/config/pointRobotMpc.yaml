@@ -12,6 +12,7 @@ mpc:
     - 'SelfCollisionAvoidanceConstraints'
     - 'JointLimitConstraints'
     - 'InputLimitConstraints'
+    - 'VelLimitConstraints'
   objectives:
     - 'GoalReaching'
   weights:

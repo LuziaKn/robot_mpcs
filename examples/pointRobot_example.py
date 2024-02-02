@@ -39,6 +39,12 @@ class PointRobotMpcExample(MpcExample):
                 [-1, 1],
                 [-15, 15],
         ])
+
+        self._limits_vel = np.array([
+                [-1, 1],
+                [-1, 1],
+                [-15, 15],
+        ])
         # Definition of the obstacle.
         static_obst_dict = {
             "type": "sphere",
@@ -83,8 +89,8 @@ class PointRobotMpcExample(MpcExample):
             qdot = ob["robot_0"]['joint_state']['velocity']
             action, output, exitflag = self._planner.computeAction(q, qdot)
             plan = []
-            for key in output:
-                plan.append(np.concatenate([output[key][:2],np.zeros(1)]))
+            for i in range(output.shape[0]):
+                plan.append(np.concatenate([output[i,:2],np.zeros(1)]))
             ob, *_ = self._env.step(action)
             self._env.update_visualizations(plan)
 
