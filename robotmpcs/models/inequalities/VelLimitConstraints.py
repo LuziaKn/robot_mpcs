@@ -11,8 +11,8 @@ class VelLimitConstraints(MpcBase):
         self._paramMap = ParamMap
         self._npar = npar
 
-        self.addEntry2ParamMap("lower_limits_vel", self._n_ineq)
-        self.addEntry2ParamMap("upper_limits_vel", self._n_ineq)
+        self.addEntry2ParamMap("lower_limits_vel", self._nx-self._n)
+        self.addEntry2ParamMap("upper_limits_vel", self._nx-self._n)
         return self._paramMap, self._npar
 
 

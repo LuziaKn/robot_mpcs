@@ -36,6 +36,6 @@ robot:
 example:
   debug: False
 ros:
-  vel_topic: "/ccc"
+  vel_topic: "/cmd_vel"
   pose_topic: "/robot_ekf/odometry"
   goal_topic: "/move_base_simple/goal"

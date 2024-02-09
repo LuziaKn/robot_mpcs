@@ -11,7 +11,8 @@ from robotmpcs.planner.mpcPlanner import MPCPlanner
 from mpscenes.goals.goal_composition import GoalComposition
 from mpscenes.obstacles.sphere_obstacle import SphereObstacle
 from ros_visuals import ROSMarkerPublisher
-
+from sensor_msgs.msg import Joy
+import sys
 def get_rotation(pose: Pose) -> float:
     orientation_q = pose.orientation
     orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
@@ -32,6 +33,8 @@ class MPCNode():
     def __init__(self):
         rospy.init_node("mpc_node")
         self._dt = rospy.get_param('/mpc/time_step')
+        self._constraints_dict = rospy.get_param('/mpc/constraints')
+        self._objectives_dict = rospy.get_param('/mpc/objectives')
         self.vel_topic = rospy.get_param('/ros/vel_topic')
         self.pose_topic = rospy.get_param('/ros/pose_topic')
         self.goal_topic = rospy.get_param('/ros/goal_topic')
@@ -41,6 +44,8 @@ class MPCNode():
         self.init_planner()
         self.set_mpc_parameter()
         self.init_arrays()
+
+        self.keep_output_enabled_for = 0
 
     def init_scenario(self):
         self._goal = None
@@ -63,8 +68,8 @@ class MPCNode():
         ])
 
         self._limits_vel = np.array([
-                [-0.2, 0.2],
-                [-0.2, 0.2],
+                [-0.5, 0.5],
+                [-0.5, 0.5],
                 [-0.2, 0.2]
         ])
 
@@ -109,14 +114,47 @@ class MPCNode():
         self._visuals_plan_circle.add_marker(Point(x=10.0, y=0.0, z=2.0))
 
     def set_mpc_parameter(self):
-        self._planner.setRadialConstraints(self._obstacles, self._r_body)
-        if hasattr(self, '_limits'):#todo also check if they were included in solver
-            self._planner.setJointLimits(np.transpose(self._limits))
-        if hasattr(self, '_limits_vel'):
-            self._planner.setVelLimits(np.transpose(self._limits_vel))
-            print("set_vel_limits")
-        if hasattr(self, '_limits_u'):
-            self._planner.setInputLimits(np.transpose(self._limits_u))
+        constraints = self._constraints_dict
+        objectives = self._objectives_dict
+
+        for constraint in constraints:
+            if constraint == 'JointLimitConstraints':
+                try:
+                    self._planner.setJointLimits(np.transpose(self._limits))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            elif constraint == 'VelLimitConstraints':
+                try:
+                    self._planner.setVelLimits(np.transpose(self._limits_vel))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            elif constraint == 'InputLimitConstraints':
+                try: self._planner.setInputLimits(np.transpose(self._limits_u))
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            elif constraint == 'LinearConstraints':
+                try: self._planner.setLinearConstraints(self._lin_constr, self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            elif constraint == 'RadialConstraints':
+                try: self._planner.setRadialConstraints(self._obstacles, self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            elif constraint == 'SelfCollisionAvoidanceConstraints':
+                try: self._planner.setSelfCollisionAvoidanceConstraints(self._r_body)
+                except AttributeError:
+                    print('The required attributes for setting ' + constraint + ' are not defined')
+                    sys.exit(1)
+            else:
+                print('No function to set the parameters for this constraint type is defined')
+                sys.exit(1)
+
+
 
     def establish_ros_connections(self):
         self._cmd_pub = rospy.Publisher(
@@ -128,6 +166,8 @@ class MPCNode():
         self._goal_sub = rospy.Subscriber(
             self.goal_topic, PoseStamped, self._goal_cb
         )
+
+        self.joystick_sub = rospy.Subscriber('/bluetooth_teleop/joy', Joy, self.joystick_cb, queue_size=1)
 
 
     def _goal_cb(self, goal_msg: Float64MultiArray):
@@ -163,18 +203,38 @@ class MPCNode():
             odom_msg.twist.twist.angular.z,
         ])
 
+    def joystick_cb(self, msg):
+        # This is used as a safety command for the real robot
+        if msg.axes[2] <= -0.9: # press L2 on ps4 controller
+            self.enable_output = True
+            self.keep_output_enabled_for = 2 # budget of two to prevent race condition
+        else:
+            self.keep_output_enabled_for = 0
+
+    def actuate_if_deadman_switch(self):
+        if self.keep_output_enabled_for > 0:
+            self.enable_output = True
+            self.keep_output_enabled_for -= 1
+            # Publish output command
+            self._cmd_pub.publish(self.vel_cmd_msg)
+        else:
+            self.enable_output = False
+
     def act(self):
         vel_action = self._action
-        cmd_msg = Twist()
-        cmd_msg.linear.x = vel_action[0]
-        cmd_msg.linear.y = vel_action[1]
-        self._cmd_pub.publish(cmd_msg)
-        self._qudot = vel_action
+        self.vel_cmd_msg = Twist()
+        self.vel_cmd_msg.linear.x = 0.1#vel_action[1]
+        self.vel_cmd_msg.linear.y = -0.1#vel_action[0]
+
+        self.actuate_if_deadman_switch()
+        #self._qudot = vel_action
 
     def run(self):
         while not rospy.is_shutdown():
             if self._goal:
-                print(self._q)
+                self._planner.setGoalReaching(self._goal)
+                print("q: " + str(self._q))
+                print("goal: " + str(self._goal))
                 self._action, output, exitflag, vel_limit = self._planner.computeAction(self._q, self._qdot)
                 for i in range(output.shape[0]):
                     position = Point(x=output[i,0], y=output[i,1], z=0.1)
